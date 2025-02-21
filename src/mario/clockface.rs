@@ -1,9 +1,8 @@
-use chrono::{DateTime, Timelike, Utc};
-
 use crate::{
-    engine::{locator::Locator, millis, object::Object, tile::Tile},
+    engine::{display::Display, millis, object::Object, tile::Tile, Sprite},
     ClockfaceTrait,
 };
+use chrono::{DateTime, Timelike, Utc};
 
 use super::gfx::{
     assets::{BUSH, CLOUD2, GROUND, HILL, SKY_COLOR},
@@ -62,7 +61,7 @@ impl ClockfaceTrait for Clockface {
     fn setup(&mut self, date_time: DateTime<Utc>) {
         self.date_time = Some(date_time);
 
-        let display = Locator::get_display();
+        let display = Display::instance().lock().unwrap();
         display.set_font(&SUPER_MARIO_BROS_24PT);
         display.fill_rect(0, 0, 64, 64, SKY_COLOR);
 

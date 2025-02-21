@@ -1,19 +1,12 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex, Once},
-};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use super::{game::Event, Sprite};
 
 const MAX_SUBS: usize = 5;
 
 pub struct EventBus {
-    subscriptions: Vec<Rc<RefCell<dyn Sprite>>>,
+    subscriptions: Vec<Arc<Mutex<dyn Sprite + Send + Sync>>>,
 }
-
-static mut EVENT_BUS: Option<Arc<Mutex<EventBus>>> = None;
-static INIT: Once = Once::new(); // Ensures initialization happens only once
 
 impl EventBus {
     pub fn new() -> Self {
@@ -24,13 +17,15 @@ impl EventBus {
 
     pub fn broadcast(&self, event: &Event, sender: &dyn Sprite) {
         for sprite in &self.subscriptions {
-            if sprite.borrow().name() != sender.name() {
-                sprite.borrow_mut().execute(sender, event);
+            // Lock the mutex to access the sprite
+            let mut sprite = sprite.lock().unwrap();
+            if sprite.name() != sender.name() {
+                sprite.execute(sender, event);
             }
         }
     }
 
-    pub fn subscribe(&mut self, sprite: Rc<RefCell<dyn Sprite>>) {
+    pub fn subscribe(&mut self, sprite: Arc<Mutex<dyn Sprite + Send + Sync>>) {
         if self.subscriptions.len() < MAX_SUBS {
             self.subscriptions.push(sprite);
         } else {
@@ -38,13 +33,8 @@ impl EventBus {
         }
     }
 
-    pub fn get_instance() -> Arc<Mutex<EventBus>> {
-        unsafe {
-            INIT.call_once(|| {
-                EVENT_BUS = Some(Arc::new(Mutex::new(EventBus::new())));
-            });
-
-            EVENT_BUS.clone().unwrap() // Safe because it's initialized only once
-        }
+    pub fn instance() -> &'static Mutex<EventBus> {
+        static INSTANCE: LazyLock<Mutex<EventBus>> = LazyLock::new(|| Mutex::new(EventBus::new()));
+        &INSTANCE
     }
 }

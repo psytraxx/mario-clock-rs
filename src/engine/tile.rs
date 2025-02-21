@@ -1,5 +1,7 @@
 use crate::GRID_SIZE;
 
+use super::display::Display;
+
 pub struct Tile {
     image: &'static [u16],
     width: i32,
@@ -16,7 +18,13 @@ impl Tile {
     }
 
     pub fn draw(&self, x: i32, y: i32) {
-        Locator::get_display().draw_rgb_bitmap(x, y, self.image, self.width, self.height);
+        Display::instance().lock().unwrap().draw_rgb_bitmap(
+            x,
+            y,
+            self.image,
+            self.width,
+            self.height,
+        );
     }
 
     pub fn fill_row(&self, y: i32) {

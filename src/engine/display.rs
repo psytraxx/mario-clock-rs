@@ -1,3 +1,5 @@
+use std::sync::{LazyLock, Mutex};
+
 use super::GFXfont;
 
 pub struct Display {}
@@ -5,6 +7,11 @@ pub struct Display {}
 impl Display {
     pub fn new() -> Self {
         Display {}
+    }
+
+    pub fn instance() -> &'static Mutex<Display> {
+        static INSTANCE: LazyLock<Mutex<Display>> = LazyLock::new(|| Mutex::new(Display::new()));
+        &INSTANCE
     }
 
     pub fn draw_rgb_bitmap(&self, x: i32, y: i32, _image: &'static [u16], width: i32, height: i32) {

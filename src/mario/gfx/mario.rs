@@ -1,4 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 use crate::engine::{
+    display::Display,
+    eventbus::EventBus,
     game::{Direction, Event},
     millis, Sprite,
 };
@@ -15,6 +19,7 @@ enum State {
     Jumping,
 }
 
+#[derive(PartialEq, Clone, Copy)]
 pub struct Mario {
     x: i32,
     y: i32,
@@ -31,7 +36,7 @@ pub struct Mario {
 
 impl Mario {
     pub fn new(x: i32, y: i32) -> Self {
-        Mario {
+        let mario = Mario {
             x,
             y,
             width: MARIO_IDLE_SIZE[0] as i32,
@@ -43,7 +48,22 @@ impl Mario {
             last_millis: 0,
             state: State::Idle,
             last_state: State::Idle,
-        }
+        };
+        EventBus::instance()
+            .lock()
+            .unwrap()
+            .subscribe(Arc::new(Mutex::new(mario)));
+        mario
+    }
+
+    pub fn init(&mut self) {
+        Display::instance().lock().unwrap().draw_rgb_bitmap(
+            self.x,
+            self.y,
+            MARIO_IDLE,
+            MARIO_IDLE_SIZE[0] as i32,
+            MARIO_IDLE_SIZE[1] as i32,
+        );
     }
 
     pub fn move_sprite(&mut self, dir: Direction) {
@@ -59,7 +79,13 @@ impl Mario {
             self.last_state = self.state;
             self.state = State::Jumping;
 
-            Locator::get_display().fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            Display::instance().lock().unwrap().fill_rect(
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                SKY_COLOR,
+            );
 
             self.width = MARIO_JUMP_SIZE[0] as i32;
             self.height = MARIO_JUMP_SIZE[1] as i32;
@@ -76,7 +102,13 @@ impl Mario {
             self.last_state = self.state;
             self.state = State::Idle;
 
-            Locator::get_display().fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            Display::instance().lock().unwrap().fill_rect(
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                SKY_COLOR,
+            );
 
             self.width = MARIO_IDLE_SIZE[0] as i32;
             self.height = MARIO_IDLE_SIZE[1] as i32;
@@ -84,19 +116,10 @@ impl Mario {
         }
     }
 
-    pub fn init(&mut self) {
-        Locator::get_display().draw_rgb_bitmap(
-            self.x,
-            self.y,
-            MARIO_IDLE,
-            MARIO_IDLE_SIZE[0] as i32,
-            MARIO_IDLE_SIZE[1] as i32,
-        );
-    }
-
     pub fn update(&mut self) {
+        let display = Display::instance().lock().unwrap();
         if self.state == State::Idle && self.state != self.last_state {
-            Locator::get_display().draw_rgb_bitmap(
+            display.draw_rgb_bitmap(
                 self.x,
                 self.y,
                 MARIO_IDLE,
@@ -104,7 +127,7 @@ impl Mario {
                 MARIO_IDLE_SIZE[1] as i32,
             );
         } else if self.state == State::Jumping && millis() - self.last_millis >= 50 {
-            Locator::get_display().fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
 
             self.y += MARIO_PACE as i32
                 * if self.direction == Direction::Up {
@@ -113,15 +136,12 @@ impl Mario {
                     1
                 };
 
-            Locator::get_display().draw_rgb_bitmap(
-                self.x,
-                self.y,
-                self.sprite,
-                self.width,
-                self.height,
-            );
+            display.draw_rgb_bitmap(self.x, self.y, self.sprite, self.width, self.height);
 
-            Locator::get_event_bus().broadcast(&Event::Move, self);
+            EventBus::instance()
+                .lock()
+                .unwrap()
+                .broadcast(&Event::Move, self);
 
             if ((self.last_y - self.y) as f32).floor() as i32 >= MARIO_JUMP_HEIGHT as i32 {
                 self.direction = Direction::Down;
