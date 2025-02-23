@@ -90,22 +90,24 @@ pub trait Sprite: Send + Sync {
     }
 }
 
-// Font related structs
-#[derive(Debug, Clone)]
-pub struct GFXfont<'a> {
-    pub bitmap: &'a [u8],
-    pub glyph: &'a [GFXglyph],
-    pub first: u8,
-    pub last: u8,
-    pub y_advance: u8,
-}
+pub mod font {
+    // Font related structs
+    #[derive(Debug, Clone)]
+    pub struct GFXfont<'a> {
+        pub bitmap: &'a [u8],
+        pub glyph: &'a [GFXglyph],
+        pub first: u8,
+        pub last: u8,
+        pub y_advance: u8,
+    }
 
-#[derive(Debug, Clone, Copy)]
-pub struct GFXglyph {
-    pub bitmap_offset: u16,
-    pub width: u8,
-    pub height: u8,
-    pub x_advance: u8,
-    pub x_offset: i8,
-    pub y_offset: i8,
+    #[derive(Debug, Clone, Copy)]
+    pub struct GFXglyph {
+        pub bitmap_offset: u16,
+        pub width: u8,
+        pub height: u8,
+        pub x_advance: u8,
+        pub x_offset: i8,
+        pub y_offset: i8,
+    }
 }

@@ -1,6 +1,6 @@
 use crate::GRID_SIZE;
 
-use super::GFXfont;
+use super::font::GFXfont;
 
 #[derive(Debug)]
 pub struct Display {

@@ -1,4 +1,4 @@
-use crate::engine::{GFXfont, GFXglyph};
+use crate::engine::font::{GFXfont, GFXglyph};
 
 /// Font bitmap data for Super Mario Bros font
 pub const SUPER_MARIO_BROS_24PT_BITMAPS: &[u8] = &[
