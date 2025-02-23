@@ -1,78 +1,49 @@
-use chrono::{DateTime, Utc};
+use ddp_rs::{connection, protocol};
+use engine::display::Display;
 use mario::clockface::Clockface;
-use minifb::{Key, Window, WindowOptions};
 const GRID_SIZE: usize = 64;
-const SCALE: usize = 4;
 
 mod engine;
 mod mario;
 
-#[derive(Clone, Copy)]
-struct Pixel {
-    r: u8,
-    g: u8,
-    b: u8,
-}
-
-impl Pixel {
-    fn to_u32(self) -> u32 {
-        ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
-    }
-
-    fn white() -> Self {
-        Pixel {
-            r: 255,
-            g: 255,
-            b: 255,
-        }
-    }
-
-    fn black() -> Self {
-        Pixel { r: 0, g: 0, b: 0 }
-    }
-}
-
 pub trait ClockfaceTrait {
-    fn update(&mut self);
-    fn setup(&mut self, date_time: DateTime<Utc>);
+    fn update(&mut self, display: &mut Display);
+    fn setup(&mut self, display: &mut Display);
 }
 
-fn main() {
-    let mut pixel_buffer = vec![Pixel::black(); GRID_SIZE * GRID_SIZE];
-    // Set every second pixel to white
-    for y in 0..GRID_SIZE {
-        for x in 0..GRID_SIZE {
-            if (x + y) % 2 == 0 {
-                pixel_buffer[y * GRID_SIZE + x] = Pixel::white();
-            }
-        }
-    }
-
+#[tokio::main]
+async fn main() -> ! {
     let mut cf = Clockface::new();
 
-    let now = Utc::now();
-    cf.setup(now);
-    cf.update();
+    let mut display = Display::new();
 
-    let mut window = Window::new(
-        "Grid - ESC to exit",
-        GRID_SIZE * SCALE,
-        GRID_SIZE * SCALE,
-        WindowOptions::default(),
+    cf.setup(&mut display);
+
+    let mut conn = connection::DDPConnection::try_new(
+        "192.168.178.63:4048",
+        protocol::PixelConfig::default(),
+        protocol::ID::Default,
+        std::net::UdpSocket::bind("0.0.0.0:4048").unwrap(),
     )
-    .unwrap_or_else(|e| {
-        panic!("{}", e);
-    });
+    .expect("Failed to create connection");
 
-    // Limit to max ~60 fps
-    window.set_target_fps(60);
+    loop {
+        cf.update(&mut display);
 
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        let buffer: Vec<u32> = pixel_buffer.iter().map(|p| p.to_u32()).collect();
+        let buffer = display.get_buffer();
+        let u32_buffer: Vec<u8> = buffer
+            .iter()
+            .flat_map(|&color| {
+                let r = ((color >> 11) & 0x1F) as u8;
+                let g = ((color >> 5) & 0x3F) as u8;
+                let b = (color & 0x1F) as u8;
+                vec![r, g, b]
+            })
+            .collect();
 
-        // Display the buffer
-        window
-            .update_with_buffer(&buffer, GRID_SIZE, GRID_SIZE)
-            .unwrap();
+        conn.write(u32_buffer.as_slice())
+            .expect("Failed to write buffer");
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }

@@ -1,10 +1,5 @@
-use std::sync::{Arc, Mutex};
-
 use crate::engine::{
-    display::Display,
-    eventbus::EventBus,
-    game::{Direction, Event},
-    millis, Sprite,
+    display::Display, millis, Direction, Event, EventReceiver, EventSender, Sprite,
 };
 
 use super::assets::{MARIO_IDLE, MARIO_IDLE_SIZE, MARIO_JUMP, MARIO_JUMP_SIZE, SKY_COLOR};
@@ -12,14 +7,14 @@ use super::assets::{MARIO_IDLE, MARIO_IDLE_SIZE, MARIO_JUMP, MARIO_JUMP_SIZE, SK
 const MARIO_PACE: u8 = 3;
 const MARIO_JUMP_HEIGHT: u8 = 14;
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum State {
     Idle,
-    Walking,
+    //Walking,
     Jumping,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(Debug)]
 pub struct Mario {
     x: i32,
     y: i32,
@@ -32,11 +27,13 @@ pub struct Mario {
     last_millis: u64,
     state: State,
     last_state: State,
+    event_tx: Option<EventSender>,
+    event_rx: Option<EventReceiver>,
 }
 
 impl Mario {
     pub fn new(x: i32, y: i32) -> Self {
-        let mario = Mario {
+        Mario {
             x,
             y,
             width: MARIO_IDLE_SIZE[0] as i32,
@@ -48,16 +45,13 @@ impl Mario {
             last_millis: 0,
             state: State::Idle,
             last_state: State::Idle,
-        };
-        EventBus::instance()
-            .lock()
-            .unwrap()
-            .subscribe(Arc::new(Mutex::new(mario)));
-        mario
+            event_tx: None,
+            event_rx: None,
+        }
     }
 
-    pub fn init(&mut self) {
-        Display::instance().lock().unwrap().draw_rgb_bitmap(
+    pub fn init(&mut self, display: &mut Display) {
+        display.draw_rgb_bitmap(
             self.x,
             self.y,
             MARIO_IDLE,
@@ -66,26 +60,20 @@ impl Mario {
         );
     }
 
-    pub fn move_sprite(&mut self, dir: Direction) {
-        match dir {
-            Direction::Right => self.x += MARIO_PACE as i32,
-            Direction::Left => self.x -= MARIO_PACE as i32,
-            _ => {}
-        }
-    }
-
-    pub fn jump(&mut self) {
+    /* pub fn move_sprite(&mut self, dir: Direction) {
+           match dir {
+               Direction::Right => self.x += MARIO_PACE as i32,
+               Direction::Left => self.x -= MARIO_PACE as i32,
+               _ => {}
+           }
+       }
+    */
+    pub fn jump(&mut self, display: &mut Display) {
         if self.state != State::Jumping && (millis() - self.last_millis > 500) {
             self.last_state = self.state;
             self.state = State::Jumping;
 
-            Display::instance().lock().unwrap().fill_rect(
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                SKY_COLOR,
-            );
+            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
 
             self.width = MARIO_JUMP_SIZE[0] as i32;
             self.height = MARIO_JUMP_SIZE[1] as i32;
@@ -97,18 +85,12 @@ impl Mario {
         }
     }
 
-    fn idle(&mut self) {
+    fn idle(&mut self, display: &mut Display) {
         if self.state != State::Idle {
             self.last_state = self.state;
             self.state = State::Idle;
 
-            Display::instance().lock().unwrap().fill_rect(
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                SKY_COLOR,
-            );
+            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
 
             self.width = MARIO_IDLE_SIZE[0] as i32;
             self.height = MARIO_IDLE_SIZE[1] as i32;
@@ -116,8 +98,22 @@ impl Mario {
         }
     }
 
-    pub fn update(&mut self) {
-        let display = Display::instance().lock().unwrap();
+    pub fn update(&mut self, display: &mut Display) {
+        let mut pending_events = Vec::new();
+        if let Some(rx) = &mut self.event_rx {
+            while let Ok(event) = rx.try_recv() {
+                pending_events.push(event);
+            }
+        }
+
+        for (sender, event) in pending_events {
+            if sender != self.name() {
+                if let Event::Collision(_) = event {
+                    self.direction = Direction::Down;
+                }
+            }
+        }
+
         if self.state == State::Idle && self.state != self.last_state {
             display.draw_rgb_bitmap(
                 self.x,
@@ -138,17 +134,14 @@ impl Mario {
 
             display.draw_rgb_bitmap(self.x, self.y, self.sprite, self.width, self.height);
 
-            EventBus::instance()
-                .lock()
-                .unwrap()
-                .broadcast(&Event::Move, self);
+            self.publish_event(Event::Move(self.get_info()));
 
             if ((self.last_y - self.y) as f32).floor() as i32 >= MARIO_JUMP_HEIGHT as i32 {
                 self.direction = Direction::Down;
             }
 
             if self.y + self.height >= 56 {
-                self.idle();
+                self.idle(display);
             }
 
             self.last_millis = millis();
@@ -177,9 +170,12 @@ impl Sprite for Mario {
         "MARIO"
     }
 
-    fn execute(&mut self, _sender: &dyn Sprite, event: &Event) {
-        if *event == Event::Collision {
-            self.direction = Direction::Down;
-        }
+    fn subscribe(&mut self, rx: EventReceiver, tx: EventSender) {
+        self.event_rx = Some(rx);
+        self.event_tx = Some(tx);
+    }
+
+    fn get_sender(&self) -> Option<EventSender> {
+        self.event_tx.clone()
     }
 }

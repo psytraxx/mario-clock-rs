@@ -1,10 +1,5 @@
-use std::sync::{Arc, Mutex};
-
 use crate::engine::{
-    display::Display,
-    eventbus::EventBus,
-    game::{Direction, Event},
-    millis, Sprite,
+    display::Display, millis, Direction, Event, EventReceiver, EventSender, Sprite,
 };
 
 use super::assets::{BLOCK, SKY_COLOR};
@@ -12,13 +7,13 @@ use super::assets::{BLOCK, SKY_COLOR};
 const MOVE_PACE: u8 = 2;
 const MAX_MOVE_HEIGHT: u8 = 4;
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum State {
     Idle,
     Hit,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Debug)]
 pub struct Block {
     x: i32,
     y: i32,
@@ -31,11 +26,13 @@ pub struct Block {
     last_state: State,
     first_y: i32,
     last_y: i32,
+    event_tx: Option<EventSender>,
+    event_rx: Option<EventReceiver>,
 }
 
 impl Block {
     pub fn new(x: i32, y: i32) -> Self {
-        let block = Block {
+        Block {
             x,
             y,
             width: 19,
@@ -47,22 +44,14 @@ impl Block {
             last_state: State::Idle,
             first_y: y,
             last_y: y,
-        };
-        let block_arc = Arc::new(Mutex::new(block.clone()));
-        EventBus::instance().lock().unwrap().subscribe(block_arc);
-
-        block
+            event_tx: None,
+            event_rx: None,
+        }
     }
 
-    pub fn init(&mut self) {
-        Display::instance().lock().unwrap().draw_rgb_bitmap(
-            self.x,
-            self.y,
-            BLOCK,
-            self.width,
-            self.height,
-        );
-        self.set_text_block();
+    pub fn init(&mut self, display: &mut Display) {
+        display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
+        self.set_text_block(display);
     }
 
     pub fn set_text(&mut self, text: String) {
@@ -86,38 +75,40 @@ impl Block {
         }
     }
 
-    fn set_text_block(&self) {
-        let display = Display::instance().lock().unwrap();
-        display.set_text_color(0x0000);
-
+    fn set_text_block(&self, display: &mut Display) {
         if self.text.len() == 1 {
-            display.set_cursor(self.x + 6, self.y + 12);
+            display.print(&self.text, self.x + 6, self.y + 12, 0x0000);
         } else {
-            display.set_cursor(self.x + 2, self.y + 12);
+            display.print(&self.text, self.x + 2, self.y + 12, 0x0000);
         }
-
-        display.print(&self.text);
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, display: &mut Display) {
+        // First get the events into a Vec to avoid holding the mutable borrow
+        let mut pending_events = Vec::new();
+        if let Some(rx) = &mut self.event_rx {
+            while let Ok(event) = rx.try_recv() {
+                pending_events.push(event);
+            }
+        }
+
+        for (sender, event) in pending_events {
+            if sender != self.name() {
+                if let Event::Move(sprite) = event {
+                    if self.collided_with(&sprite) {
+                        self.hit();
+                        self.publish_event(Event::Collision(self.get_info()));
+                    }
+                }
+            }
+        }
+
         if self.state == State::Idle && self.last_state != self.state {
-            Display::instance().lock().unwrap().draw_rgb_bitmap(
-                self.x,
-                self.y,
-                BLOCK,
-                self.width,
-                self.height,
-            );
-            self.set_text_block();
+            display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
+            self.set_text_block(display);
             self.last_state = self.state;
         } else if self.state == State::Hit && millis() - self.last_millis >= 60 {
-            Display::instance().lock().unwrap().fill_rect(
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                SKY_COLOR,
-            );
+            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
 
             self.y += MOVE_PACE as i32
                 * if self.direction == Direction::Up {
@@ -126,14 +117,8 @@ impl Block {
                     1
                 };
 
-            Display::instance().lock().unwrap().draw_rgb_bitmap(
-                self.x,
-                self.y,
-                BLOCK,
-                self.width,
-                self.height,
-            );
-            self.set_text_block();
+            display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
+            self.set_text_block(display);
 
             if ((self.first_y - self.y) as f32).floor() as i32 >= MAX_MOVE_HEIGHT as i32 {
                 self.direction = Direction::Down;
@@ -169,13 +154,12 @@ impl Sprite for Block {
         "Block"
     }
 
-    fn execute(&mut self, sender: &dyn Sprite, event: &Event) {
-        if *event == Event::Move && self.collided_with(sender) {
-            self.hit();
-            EventBus::instance()
-                .lock()
-                .unwrap()
-                .broadcast(&Event::Collision, self);
-        }
+    fn subscribe(&mut self, rx: EventReceiver, tx: EventSender) {
+        self.event_rx = Some(rx);
+        self.event_tx = Some(tx);
+    }
+
+    fn get_sender(&self) -> Option<EventSender> {
+        self.event_tx.clone()
     }
 }
