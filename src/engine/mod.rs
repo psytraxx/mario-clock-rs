@@ -34,8 +34,8 @@ pub enum Event {
 }
 
 // Event system types
-pub type EventSender = Sender<(String, Event)>;
-pub type EventReceiver = Receiver<(String, Event)>;
+pub type EventSender = Sender<Event>;
+pub type EventReceiver = Receiver<Event>;
 
 // Utility functions
 pub fn millis() -> u64 {
@@ -65,7 +65,10 @@ pub trait Sprite: Send + Sync {
     // Default implementations
     fn publish_event(&self, event: Event) {
         if let Some(sender) = self.get_sender() {
-            let _ = sender.send((self.name().to_string(), event));
+            match sender.send(event) {
+                Ok(_) => {}
+                Err(e) => eprintln!("Error sending event: {:?}", e),
+            }
         }
     }
 

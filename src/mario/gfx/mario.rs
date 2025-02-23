@@ -99,16 +99,9 @@ impl Mario {
     }
 
     pub fn update(&mut self, display: &mut Display) {
-        let mut pending_events = Vec::new();
         if let Some(rx) = &mut self.event_rx {
-            while let Ok(event) = rx.try_recv() {
-                pending_events.push(event);
-            }
-        }
-
-        for (sender, event) in pending_events {
-            if sender != self.name() {
-                if let Event::Collision(_) = event {
+            if let Ok(Event::Collision(info)) = rx.try_recv() {
+                if info.name != self.name() {
                     self.direction = Direction::Down;
                 }
             }

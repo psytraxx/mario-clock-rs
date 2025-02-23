@@ -84,21 +84,11 @@ impl Block {
     }
 
     pub fn update(&mut self, display: &mut Display) {
-        // First get the events into a Vec to avoid holding the mutable borrow
-        let mut pending_events = Vec::new();
         if let Some(rx) = &mut self.event_rx {
-            while let Ok(event) = rx.try_recv() {
-                pending_events.push(event);
-            }
-        }
-
-        for (sender, event) in pending_events {
-            if sender != self.name() {
-                if let Event::Move(sprite) = event {
-                    if self.collided_with(&sprite) {
-                        self.hit();
-                        self.publish_event(Event::Collision(self.get_info()));
-                    }
+            if let Ok(Event::Move(sprite)) = rx.try_recv() {
+                if sprite.name != self.name() && self.collided_with(&sprite) {
+                    self.hit();
+                    self.publish_event(Event::Collision(self.get_info()));
                 }
             }
         }

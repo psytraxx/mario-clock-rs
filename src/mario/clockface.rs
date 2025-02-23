@@ -12,7 +12,6 @@ use super::gfx::{
 };
 
 pub struct Clockface {
-    // Game objects
     ground: Tile,
     bush: Object,
     cloud1: Object,
@@ -57,6 +56,7 @@ impl Clockface {
 
 impl ClockfaceTrait for Clockface {
     fn setup(&mut self, display: &mut Display) {
+        // set global font
         display.set_font(SUPER_MARIO_BROS_24PT);
         display.fill_rect(0, 0, GRID_SIZE as i32, GRID_SIZE as i32, SKY_COLOR);
 
@@ -80,7 +80,7 @@ impl ClockfaceTrait for Clockface {
         self.minute_block.update(display);
         self.mario.update(display);
 
-        if Utc::now().second() % 10 == 0 {
+        if Utc::now().second() == 0 {
             self.mario.jump(display);
             self.update_time();
         }
