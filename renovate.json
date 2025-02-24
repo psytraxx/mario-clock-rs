@@ -1,6 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
-  ]
+    "config:recommended",
+    "schedule:monthly",
+    ":automergePatch",
+    ":automergeDigest",
+    ":automergeMinor",
+    ":automergePr",
+    ":label(renovate)",
+    ":dependencyDashboard",
+    "group:allNonMajor",
+    "group:allDigest"
+  ],
+  "vulnerabilityAlerts": {
+    "labels": [
+      "security"
+    ],
+    "automerge": true
+  }
 }
