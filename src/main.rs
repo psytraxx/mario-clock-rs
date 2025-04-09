@@ -6,7 +6,7 @@ use display_task::display_task;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use esp_alloc::heap_allocator;
+use esp_alloc::{heap_allocator, psram_allocator};
 use esp_backtrace as _;
 use esp_hal::{
     gpio::Pin,
@@ -67,6 +67,9 @@ async fn main(spawner: Spawner) {
     let timg1 = TimerGroup::new(peripherals.TIMG1);
 
     esp_hal_embassy::init([timg0.timer0, timg0.timer1]);
+
+    // Initialize the PSRAM allocator for extra memory requirements
+    psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
     let stack = connect_to_wifi(
         peripherals.WIFI,
