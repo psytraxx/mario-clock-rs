@@ -2,14 +2,15 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubC
 use static_cell::StaticCell;
 
 use crate::{
-    engine::{display::Display, object::Object, tile::Tile, Event, Sprite},
-    ClockfaceTrait, GRID_SIZE,
+    engine::{fill_rect, object::Object, rgb565_to_rgb888, tile::Tile, Event, Sprite}, // Keep others
+    ClockfaceTrait,
+    FBType,
+    GRID_SIZE,
 };
 
 use super::gfx::{
     assets::{BUSH, CLOUD2, GROUND, HILL, SKY_COLOR},
     block::Block,
-    font::SUPER_MARIO_BROS_24PT,
     mario::Mario,
 };
 
@@ -60,38 +61,43 @@ impl Clockface {
         */
 
         self.hour_block.set_text("00");
-        self.hour_block.set_text("00");
+        self.minute_block.set_text("00");
     }
 }
 
 impl ClockfaceTrait for Clockface {
-    fn setup(&mut self, display: &mut Display) {
-        // set global font
-        display.set_font(SUPER_MARIO_BROS_24PT);
-        display.fill_rect(0, 0, GRID_SIZE as i32, GRID_SIZE as i32, SKY_COLOR);
+    fn setup(&mut self, fb: &mut FBType) {
+        fill_rect(
+            fb,
+            0,
+            0,
+            GRID_SIZE as u32,
+            GRID_SIZE as u32,
+            rgb565_to_rgb888(SKY_COLOR),
+        );
 
         // Initialize scene
         self.ground
-            .fill_row(GRID_SIZE as i32 - self.ground.height(), display);
-        self.bush.draw(43, 47, display);
-        self.hill.draw(0, 34, display);
-        self.cloud1.draw(0, 21, display);
-        self.cloud2.draw(51, 7, display);
+            .fill_row(GRID_SIZE as i32 - self.ground.height(), fb);
+        self.bush.draw(43, 47, fb);
+        self.hill.draw(0, 34, fb);
+        self.cloud1.draw(0, 21, fb);
+        self.cloud2.draw(51, 7, fb);
 
         self.update_time();
 
-        self.hour_block.init(display);
-        self.minute_block.init(display);
-        self.mario.init(display);
+        self.hour_block.init(fb);
+        self.minute_block.init(fb);
+        self.mario.init(fb);
     }
 
-    async fn update(&mut self, display: &mut Display) {
-        self.hour_block.update(display).await;
-        self.minute_block.update(display).await;
-        self.mario.update(display).await;
+    async fn update(&mut self, fb: &mut FBType) {
+        self.hour_block.update(fb).await;
+        self.minute_block.update(fb).await;
+        self.mario.update(fb).await;
 
         //if Utc::now().second() == 0 {
-        self.mario.jump(display);
+        self.mario.jump(fb);
         self.update_time();
         //}
     }

@@ -1,16 +1,8 @@
 use core::sync::atomic::Ordering;
 use embassy_executor::task;
-use embassy_time::{Duration, Timer};
-use embedded_graphics::draw_target::DrawTarget;
-use embedded_graphics::prelude::Dimensions;
-use embedded_graphics::{
-    prelude::{Point, RgbColor, Size},
-    primitives::Rectangle,
-};
 use esp_hal::system::Cpu;
 use esp_println::println;
 
-use crate::engine::display::Display;
 use crate::mario::clockface::Clockface;
 use crate::{ClockfaceTrait, FBType, FrameBufferExchange, REFRESH_RATE};
 
@@ -27,32 +19,21 @@ pub async fn display_task(
 
     // Initialize clockface
     let mut cf = Clockface::new();
-
     // Initial setup
-    let mut display = Display::new();
-    cf.setup(&mut display);
+    cf.setup(fb);
 
     loop {
-        fb.clear();
-
         // Update clock logic
-        cf.update(&mut display).await;
+        cf.update(fb).await;
 
-        /*fb.fill_contiguous(&fb.bounding_box(), *display.get_buffer())
-        .expect("Failed to fill matrix");*/
-        let _ = fb.fill_solid(
-            &Rectangle::new(Point::zero(), Size::new(64, 64)),
-            RgbColor::GREEN,
-        );
-        println!("Refresh: {:4}", REFRESH_RATE.load(Ordering::Relaxed));
+        let _rate = REFRESH_RATE.load(Ordering::Relaxed);
+
+        //println!("Refresh: {:4}", rate);
 
         // send the frame buffer to be rendered
         tx.signal(fb);
 
         // get the next frame buffer
         fb = rx.wait().await;
-
-        // Clock update can have a slower cadence
-        Timer::after(Duration::from_millis(100)).await;
     }
 }

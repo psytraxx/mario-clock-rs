@@ -1,13 +1,11 @@
 #![no_std]
 #![no_main]
 
-use core::{future::Future, ptr::addr_of_mut, sync::atomic::AtomicU32};
+use core::{future::Future, sync::atomic::AtomicU32};
 use display_task::display_task;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use embedded_graphics::pixelcolor::Rgb888;
-use engine::display::Display;
 use esp_alloc::heap_allocator;
 use esp_backtrace as _;
 use esp_hal::{
@@ -40,7 +38,6 @@ const FRAME_COUNT: usize = compute_frame_count(BITS);
 
 // Define the channel type for passing display data
 // Define a fixed-size buffer type for the display
-type DisplayBuffer = [Rgb888; GRID_SIZE * GRID_SIZE];
 type FBType = DmaFrameBuffer<ROWS, COLS, NROWS, BITS, FRAME_COUNT>;
 type FrameBufferExchange = Signal<CriticalSectionRawMutex, &'static mut FBType>;
 
@@ -56,12 +53,12 @@ macro_rules! mk_static {
 static REFRESH_RATE: AtomicU32 = AtomicU32::new(0);
 
 pub trait ClockfaceTrait {
-    fn update(&mut self, display: &mut Display) -> impl Future<Output = ()> + Send;
-    fn setup(&mut self, display: &mut Display);
+    fn update(&mut self, fb: &mut FBType) -> impl Future<Output = ()> + Send;
+    fn setup(&mut self, fb: &mut FBType);
 }
 
 #[main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(esp_hal::Config::default());
 
     heap_allocator!(size: 72 * 1024);
@@ -70,23 +67,23 @@ async fn main(_spawner: Spawner) {
     let timg1 = TimerGroup::new(peripherals.TIMG1);
 
     esp_hal_embassy::init([timg0.timer0, timg0.timer1]);
-    /*
-       let stack = connect_to_wifi(
-           peripherals.WIFI,
-           timg1.timer0,
-           peripherals.RADIO_CLK,
-           peripherals.RNG,
-           spawner,
-       )
-       .await
-       .expect("Failed to connect to WiFi");
 
-       if let Some(stack_config) = stack.config_v4() {
-           println!("Client IP: {}", stack_config.address);
-       } else {
-           println!("Failed to get stack config");
-       }
-    */
+    let stack = connect_to_wifi(
+        peripherals.WIFI,
+        timg1.timer0,
+        peripherals.RADIO_CLK,
+        peripherals.RNG,
+        spawner,
+    )
+    .await
+    .expect("Failed to connect to WiFi");
+
+    if let Some(stack_config) = stack.config_v4() {
+        println!("Client IP: {}", stack_config.address);
+    } else {
+        println!("Failed to get stack config");
+    }
+
     let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     let software_interrupt = sw_ints.software_interrupt2;
 

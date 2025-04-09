@@ -1,9 +1,11 @@
+use crate::{
+    engine::{draw_rgb_bitmap, fill_rect, millis, rgb565_to_rgb888, Direction, Event, Sprite},
+    FBType,
+};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
-
-use crate::engine::{display::Display, millis, Direction, Event, Sprite};
 
 use super::assets::{MARIO_IDLE, MARIO_IDLE_SIZE, MARIO_JUMP, MARIO_JUMP_SIZE, SKY_COLOR};
 
@@ -52,8 +54,9 @@ impl Mario {
         }
     }
 
-    pub fn init(&mut self, display: &mut Display) {
-        display.draw_rgb_bitmap(
+    pub fn init(&mut self, fb: &mut FBType) {
+        draw_rgb_bitmap(
+            fb,
             self.x,
             self.y,
             MARIO_IDLE,
@@ -70,12 +73,19 @@ impl Mario {
            }
        }
     */
-    pub fn jump(&mut self, display: &mut Display) {
+    pub fn jump(&mut self, fb: &mut FBType) {
         if self.state != State::Jumping && (millis() - self.last_millis > 500) {
             self.last_state = self.state;
             self.state = State::Jumping;
 
-            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            fill_rect(
+                fb,
+                self.x,
+                self.y,
+                self.width as u32,
+                self.height as u32,
+                rgb565_to_rgb888(SKY_COLOR),
+            );
 
             self.width = MARIO_JUMP_SIZE[0] as i32;
             self.height = MARIO_JUMP_SIZE[1] as i32;
@@ -87,12 +97,19 @@ impl Mario {
         }
     }
 
-    fn idle(&mut self, display: &mut Display) {
+    fn idle(&mut self, fb: &mut FBType) {
         if self.state != State::Idle {
             self.last_state = self.state;
             self.state = State::Idle;
 
-            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            fill_rect(
+                fb,
+                self.x,
+                self.y,
+                self.width as u32,
+                self.height as u32,
+                rgb565_to_rgb888(SKY_COLOR),
+            );
 
             self.width = MARIO_IDLE_SIZE[0] as i32;
             self.height = MARIO_IDLE_SIZE[1] as i32;
@@ -100,7 +117,7 @@ impl Mario {
         }
     }
 
-    pub async fn update(&mut self, display: &mut Display) {
+    pub async fn update(&mut self, fb: &mut FBType) {
         if let Some(rx) = &mut self.rx {
             match rx.try_next_message_pure() {
                 Some(Event::Collision(t)) if t.name != self.name() => {
@@ -111,7 +128,8 @@ impl Mario {
         }
 
         if self.state == State::Idle && self.state != self.last_state {
-            display.draw_rgb_bitmap(
+            draw_rgb_bitmap(
+                fb,
                 self.x,
                 self.y,
                 MARIO_IDLE,
@@ -119,7 +137,14 @@ impl Mario {
                 MARIO_IDLE_SIZE[1] as i32,
             );
         } else if self.state == State::Jumping && millis() - self.last_millis >= 50 {
-            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            fill_rect(
+                fb,
+                self.x,
+                self.y,
+                self.width as u32,
+                self.height as u32,
+                rgb565_to_rgb888(SKY_COLOR),
+            );
 
             self.y += MARIO_PACE as i32
                 * if self.direction == Direction::Up {
@@ -128,7 +153,7 @@ impl Mario {
                     1
                 };
 
-            display.draw_rgb_bitmap(self.x, self.y, self.sprite, self.width, self.height);
+            draw_rgb_bitmap(fb, self.x, self.y, self.sprite, self.width, self.height);
 
             let info = self.get_info();
             if let Some(tx) = &mut self.tx {
@@ -140,7 +165,7 @@ impl Mario {
             }
 
             if self.y + self.height >= 56 {
-                self.idle(display);
+                self.idle(fb);
             }
 
             self.last_millis = millis();

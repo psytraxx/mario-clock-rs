@@ -1,9 +1,15 @@
 use super::assets::{BLOCK, SKY_COLOR};
-use crate::engine::{display::Display, millis, Direction, Event, Sprite};
+use crate::{
+    engine::{
+        draw_rgb_bitmap, fill_rect, millis, print, rgb565_to_rgb888, Direction, Event, Sprite,
+    },
+    FBType,
+};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
+use embedded_graphics::{pixelcolor::Rgb888, prelude::RgbColor};
 use heapless::String;
 
 const MOVE_PACE: u8 = 2;
@@ -50,9 +56,16 @@ impl Block {
         }
     }
 
-    pub fn init(&mut self, display: &mut Display) {
-        display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
-        self.set_text_block(display);
+    pub fn init(&mut self, fb: &mut FBType) {
+        draw_rgb_bitmap(
+            fb,
+            self.x,
+            self.y,
+            BLOCK, // Use the BLOCK asset
+            self.width,
+            self.height,
+        );
+        self.set_text_block(fb);
     }
 
     pub fn set_text(&mut self, text: &str) {
@@ -77,15 +90,15 @@ impl Block {
         }
     }
 
-    fn set_text_block(&self, display: &mut Display) {
+    fn set_text_block(&self, fb: &mut FBType) {
         if self.text.len() == 1 {
-            display.print(&self.text, self.x + 6, self.y + 12, 0x0000);
+            print(fb, &self.text, self.x + 6, self.y + 12, Rgb888::BLACK);
         } else {
-            display.print(&self.text, self.x + 2, self.y + 12, 0x0000);
+            print(fb, &self.text, self.x + 2, self.y + 12, Rgb888::BLACK);
         }
     }
 
-    pub async fn update(&mut self, display: &mut Display) {
+    pub async fn update(&mut self, fb: &mut FBType) {
         if let Some(rx) = &mut self.rx {
             if let Some(Event::Move(sprite)) = rx.try_next_message_pure() {
                 if sprite.name != self.name() && self.collided_with(&sprite) {
@@ -99,11 +112,18 @@ impl Block {
         }
 
         if self.state == State::Idle && self.last_state != self.state {
-            display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
-            self.set_text_block(display);
+            draw_rgb_bitmap(fb, self.x, self.y, BLOCK, self.width, self.height);
+            self.set_text_block(fb);
             self.last_state = self.state;
         } else if self.state == State::Hit && millis() - self.last_millis >= 60 {
-            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            fill_rect(
+                fb,
+                self.x,
+                self.y,
+                self.width as u32,
+                self.height as u32,
+                rgb565_to_rgb888(SKY_COLOR),
+            );
 
             self.y += MOVE_PACE as i32
                 * if self.direction == Direction::Up {
@@ -112,8 +132,9 @@ impl Block {
                     1
                 };
 
-            display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
-            self.set_text_block(display);
+            draw_rgb_bitmap(fb, self.x, self.y, BLOCK, self.width, self.height);
+
+            self.set_text_block(fb);
 
             if (self.first_y - self.y) >= MAX_MOVE_HEIGHT as i32 {
                 self.direction = Direction::Down;
