@@ -61,37 +61,34 @@ pub trait ClockfaceTrait {
 }
 
 #[main]
-async fn main(spawner: Spawner) {
+async fn main(_spawner: Spawner) {
     let peripherals = esp_hal::init(esp_hal::Config::default());
-    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    let software_interrupt = sw_ints.software_interrupt2;
 
     heap_allocator!(size: 72 * 1024);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
 
-    let stack = connect_to_wifi(
-        peripherals.WIFI,
-        timg1.timer0,
-        peripherals.RADIO_CLK,
-        peripherals.RNG,
-        spawner,
-    )
-    .await
-    .expect("Failed to connect to WiFi");
-
-    if let Some(stack_config) = stack.config_v4() {
-        println!("Client IP: {}", stack_config.address);
-    } else {
-        println!("Failed to get stack config");
-    }
-
     esp_hal_embassy::init([timg0.timer0, timg0.timer1]);
+    /*
+       let stack = connect_to_wifi(
+           peripherals.WIFI,
+           timg1.timer0,
+           peripherals.RADIO_CLK,
+           peripherals.RNG,
+           spawner,
+       )
+       .await
+       .expect("Failed to connect to WiFi");
 
-    let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
-
-    static mut APP_CORE_STACK: Stack<8192> = Stack::new();
+       if let Some(stack_config) = stack.config_v4() {
+           println!("Client IP: {}", stack_config.address);
+       } else {
+           println!("Failed to get stack config");
+       }
+    */
+    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    let software_interrupt = sw_ints.software_interrupt2;
 
     println!("init framebuffer exchange");
     static TX: FrameBufferExchange = FrameBufferExchange::new();
@@ -106,38 +103,56 @@ async fn main(spawner: Spawner) {
     let hub75_peripherals = Hub75Peripherals {
         lcd_cam: peripherals.LCD_CAM,
         dma_channel: peripherals.DMA_CH0,
-        red1: peripherals.GPIO38.degrade(),
-        grn1: peripherals.GPIO42.degrade(),
-        blu1: peripherals.GPIO48.degrade(),
-        red2: peripherals.GPIO47.degrade(),
-        grn2: peripherals.GPIO2.degrade(),
-        blu2: peripherals.GPIO21.degrade(),
-        addr0: peripherals.GPIO14.degrade(),
-        addr1: peripherals.GPIO46.degrade(),
-        addr2: peripherals.GPIO13.degrade(),
-        addr3: peripherals.GPIO9.degrade(),
-        addr4: peripherals.GPIO3.degrade(),
-        blank: peripherals.GPIO11.degrade(),
-        clock: peripherals.GPIO12.degrade(),
-        latch: peripherals.GPIO10.degrade(),
+        red1: peripherals.GPIO2.degrade(),
+        grn1: peripherals.GPIO6.degrade(),
+        blu1: peripherals.GPIO10.degrade(),
+        red2: peripherals.GPIO3.degrade(),
+        grn2: peripherals.GPIO7.degrade(),
+        blu2: peripherals.GPIO11.degrade(),
+        addr0: peripherals.GPIO39.degrade(),
+        addr1: peripherals.GPIO38.degrade(),
+        addr2: peripherals.GPIO37.degrade(),
+        addr3: peripherals.GPIO36.degrade(),
+        addr4: peripherals.GPIO21.degrade(),
+        blank: peripherals.GPIO35.degrade(),
+        clock: peripherals.GPIO34.degrade(),
+        latch: peripherals.GPIO33.degrade(),
     };
 
-    spawner.spawn(display_task(&TX, &RX, fb0)).ok();
-
-    let _guard = cpu_control
-        .start_app_core(unsafe { &mut *addr_of_mut!(APP_CORE_STACK) }, move || {
-            let executor = mk_static!(
+    // run hub75 and display on second core
+    let cpu1_fnctn = {
+        move || {
+            use esp_hal_embassy::Executor;
+            let hp_executor = mk_static!(
                 InterruptExecutor<2>,
                 InterruptExecutor::new(software_interrupt)
             );
-            let high_pri_spawner = executor.start(Priority::Priority3);
+            let high_pri_spawner = hp_executor.start(Priority::Priority3);
+
+            // hub75 runs as high priority task
             high_pri_spawner
                 .spawn(hub75_task(hub75_peripherals, &RX, &TX, fb1))
                 .ok();
-        })
+
+            let lp_executor = mk_static!(Executor, Executor::new());
+            // display task runs as low priority task
+            lp_executor.run(|spawner| {
+                spawner.spawn(display_task(&TX, &RX, fb0)).ok();
+            });
+        }
+    };
+
+    let mut _cpu_control = CpuControl::new(peripherals.CPU_CTRL);
+    const DISPLAY_STACK_SIZE: usize = 8192;
+    let app_core_stack = mk_static!(Stack<DISPLAY_STACK_SIZE>, Stack::new());
+
+    #[allow(static_mut_refs)]
+    let _guard = _cpu_control
+        .start_app_core(app_core_stack, cpu1_fnctn)
         .unwrap();
 
     loop {
-        Timer::after(Duration::from_millis(100)).await;
+        // The main task keeps running so the executor doesn't exit
+        Timer::after(Duration::from_secs(1)).await;
     }
 }

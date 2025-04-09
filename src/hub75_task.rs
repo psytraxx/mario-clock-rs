@@ -62,7 +62,7 @@ pub async fn hub75_task(
         pins,
         channel,
         tx_descriptors,
-        Rate::from_mhz(20),
+        Rate::from_mhz(10),
     )
     .expect("failed to create Hub75!");
 

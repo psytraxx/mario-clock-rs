@@ -32,21 +32,18 @@ pub async fn display_task(
     let mut display = Display::new();
     cf.setup(&mut display);
 
-    fb.clear();
-    let _ = fb.fill_solid(
-        &Rectangle::new(Point::zero(), Size::new(64, 64)),
-        RgbColor::BLUE,
-    );
-
     loop {
         fb.clear();
 
         // Update clock logic
         cf.update(&mut display).await;
 
-        fb.fill_contiguous(&fb.bounding_box(), *display.get_buffer())
-            .expect("Failed to fill matrix");
-
+        /*fb.fill_contiguous(&fb.bounding_box(), *display.get_buffer())
+        .expect("Failed to fill matrix");*/
+        let _ = fb.fill_solid(
+            &Rectangle::new(Point::zero(), Size::new(64, 64)),
+            RgbColor::GREEN,
+        );
         println!("Refresh: {:4}", REFRESH_RATE.load(Ordering::Relaxed));
 
         // send the frame buffer to be rendered
