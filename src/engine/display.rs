@@ -1,10 +1,12 @@
-use crate::GRID_SIZE;
+use embedded_graphics::{pixelcolor::Rgb888, prelude::RgbColor};
+
+use crate::{DisplayBuffer, GRID_SIZE};
 
 use super::font::GFXfont;
 
 #[derive(Debug)]
 pub struct Display {
-    pixel_buffer: [u16; GRID_SIZE * GRID_SIZE],
+    pixel_buffer: DisplayBuffer,
     font: Option<GFXfont<'static>>,
 }
 
@@ -16,14 +18,14 @@ impl Default for Display {
 
 impl Display {
     pub fn new() -> Self {
-        let pixel_buffer = [0; GRID_SIZE * GRID_SIZE];
+        let pixel_buffer = [Rgb888::BLACK; GRID_SIZE * GRID_SIZE];
         Display {
             pixel_buffer,
             font: None,
         }
     }
 
-    pub fn get_buffer(&self) -> &[u16] {
+    pub fn get_buffer(&self) -> &DisplayBuffer {
         &self.pixel_buffer
     }
 
@@ -65,9 +67,25 @@ impl Display {
                 }
 
                 let dest_index = dest_y as usize * GRID_SIZE + dest_x as usize;
-                self.pixel_buffer[dest_index] = image[src_index];
+                self.pixel_buffer[dest_index] = self.rgb565_to_rgb888(image[src_index]);
             }
         }
+    }
+
+    // Add this helper function to convert RGB565 to RGB888
+    #[inline]
+    fn rgb565_to_rgb888(&self, color: u16) -> Rgb888 {
+        // Extract RGB components from RGB565
+        let r5 = ((color >> 11) & 0x1F) as u8;
+        let g6 = ((color >> 5) & 0x3F) as u8;
+        let b5 = (color & 0x1F) as u8;
+
+        // Convert to RGB888 (expand to 8 bits per channel)
+        let r8 = (r5 * 255) / 31;
+        let g8 = (g6 * 255) / 63;
+        let b8 = (b5 * 255) / 31;
+
+        Rgb888::new(r8, g8, b8)
     }
 
     pub fn fill_rect(&mut self, x: i32, y: i32, width: i32, height: i32, color: u16) {
@@ -96,7 +114,7 @@ impl Display {
             for col in start_col..end_col {
                 let dest_x = x + col;
                 let dest_index = dest_index_base + dest_x as usize;
-                self.pixel_buffer[dest_index] = color;
+                self.pixel_buffer[dest_index] = self.rgb565_to_rgb888(color);
             }
         }
     }
@@ -133,7 +151,7 @@ impl Display {
                         let bit_index = bitmap_row_start + col as usize;
                         if bitmap[bit_index / 8] & (0x80 >> (bit_index % 8)) != 0 {
                             let dest_index = dest_index_base + dest_x as usize;
-                            self.pixel_buffer[dest_index] = color;
+                            self.pixel_buffer[dest_index] = self.rgb565_to_rgb888(color);
                         }
                     }
                 }

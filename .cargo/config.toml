@@ -1,0 +1,14 @@
+[target.xtensa-esp32s3-none-elf]
+runner = "espflash flash -c esp32s3 -s 16mb -m dio -f 80mhz --no-skip --monitor"
+
+[env]
+ESP_LOG = "INFO"
+ESP_WIFI_COUNTRY_CODE = "DE"
+
+[build]
+rustflags = ["-C", "link-arg=-nostartfiles"]
+
+target = "xtensa-esp32s3-none-elf"
+
+[unstable]
+build-std = ["alloc", "core"]
