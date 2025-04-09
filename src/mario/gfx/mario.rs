@@ -1,6 +1,9 @@
-use crate::engine::{
-    display::Display, millis, Direction, Event, EventReceiver, EventSender, Sprite,
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    pubsub::{Publisher, Subscriber},
 };
+
+use crate::engine::{display::Display, millis, Direction, Event, Sprite};
 
 use super::assets::{MARIO_IDLE, MARIO_IDLE_SIZE, MARIO_JUMP, MARIO_JUMP_SIZE, SKY_COLOR};
 
@@ -14,7 +17,6 @@ enum State {
     Jumping,
 }
 
-#[derive(Debug)]
 pub struct Mario {
     x: i32,
     y: i32,
@@ -27,8 +29,8 @@ pub struct Mario {
     last_millis: u64,
     state: State,
     last_state: State,
-    event_tx: Option<EventSender>,
-    event_rx: Option<EventReceiver>,
+    rx: Option<Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
+    tx: Option<Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
 }
 
 impl Mario {
@@ -45,8 +47,8 @@ impl Mario {
             last_millis: 0,
             state: State::Idle,
             last_state: State::Idle,
-            event_tx: None,
-            event_rx: None,
+            rx: None,
+            tx: None,
         }
     }
 
@@ -98,12 +100,13 @@ impl Mario {
         }
     }
 
-    pub fn update(&mut self, display: &mut Display) {
-        if let Some(rx) = &mut self.event_rx {
-            if let Ok(Event::Collision(info)) = rx.try_recv() {
-                if info.name != self.name() {
+    pub async fn update(&mut self, display: &mut Display) {
+        if let Some(rx) = &mut self.rx {
+            match rx.try_next_message_pure() {
+                Some(Event::Collision(t)) if t.name != self.name() => {
                     self.direction = Direction::Down;
                 }
+                _ => {}
             }
         }
 
@@ -127,9 +130,12 @@ impl Mario {
 
             display.draw_rgb_bitmap(self.x, self.y, self.sprite, self.width, self.height);
 
-            self.publish_event(Event::Move(self.get_info()));
+            let info = self.get_info();
+            if let Some(tx) = &mut self.tx {
+                tx.publish(Event::Move(info)).await;
+            }
 
-            if ((self.last_y - self.y) as f32).floor() as i32 >= MARIO_JUMP_HEIGHT as i32 {
+            if (self.last_y - self.y) >= MARIO_JUMP_HEIGHT as i32 {
                 self.direction = Direction::Down;
             }
 
@@ -159,16 +165,16 @@ impl Sprite for Mario {
         self.height as u8
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "MARIO"
     }
 
-    fn subscribe(&mut self, rx: EventReceiver, tx: EventSender) {
-        self.event_rx = Some(rx);
-        self.event_tx = Some(tx);
-    }
-
-    fn get_sender(&self) -> Option<EventSender> {
-        self.event_tx.clone()
+    fn subscribe(
+        &mut self,
+        tx: Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
+        rx: Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
+    ) {
+        self.rx = Some(rx);
+        self.tx = Some(tx);
     }
 }
