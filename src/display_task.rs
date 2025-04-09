@@ -7,6 +7,7 @@ use embedded_graphics::{
     prelude::{Point, RgbColor, Size},
     primitives::Rectangle,
 };
+use esp_hal::system::Cpu;
 use esp_println::println;
 
 use crate::engine::display::Display;
@@ -19,7 +20,10 @@ pub async fn display_task(
     tx: &'static FrameBufferExchange,
     mut fb: &'static mut FBType,
 ) {
-    println!("display_task: starting!");
+    println!(
+        "Starting display_task() on core {}",
+        Cpu::current() as usize
+    );
 
     // Initialize clockface
     let mut cf = Clockface::new();

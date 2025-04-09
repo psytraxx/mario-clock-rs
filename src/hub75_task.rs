@@ -2,7 +2,7 @@ use core::sync::atomic::Ordering;
 
 use embassy_executor::task;
 use embassy_time::{Duration, Instant};
-use esp_hal::{gpio::AnyPin, peripherals::LCD_CAM, time::Rate};
+use esp_hal::{gpio::AnyPin, peripherals::LCD_CAM, system::Cpu, time::Rate};
 use esp_hub75::{lcd_cam::Hub75, Hub75Pins};
 use esp_println::println;
 
@@ -36,7 +36,7 @@ pub async fn hub75_task(
     tx: &'static FrameBufferExchange,
     fb: &'static mut FBType,
 ) {
-    println!("hub75_task: starting!");
+    println!("Starting hub75_task() on core {}", Cpu::current() as usize);
     let channel = peripherals.dma_channel;
     let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, size_of::<FBType>());
 

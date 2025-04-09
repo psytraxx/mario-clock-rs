@@ -1,7 +1,8 @@
 #![no_std]
 #![no_main]
 
-use core::{future::Future, sync::atomic::AtomicU32};
+use core::{future::Future, ptr::addr_of_mut, sync::atomic::AtomicU32};
+use display_task::display_task;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
@@ -19,12 +20,14 @@ use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::DmaFrameBuffer;
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows};
 use esp_println::println;
-use hub75_task::Hub75Peripherals;
+use hub75_task::{hub75_task, Hub75Peripherals};
+use wifi_task::connect_to_wifi;
 
 mod display_task;
 mod engine;
 mod hub75_task;
 mod mario;
+mod wifi_task;
 
 extern crate alloc;
 
@@ -41,7 +44,6 @@ type DisplayBuffer = [Rgb888; GRID_SIZE * GRID_SIZE];
 type FBType = DmaFrameBuffer<ROWS, COLS, NROWS, BITS, FRAME_COUNT>;
 type FrameBufferExchange = Signal<CriticalSectionRawMutex, &'static mut FBType>;
 
-// When you are okay with using a nightly compiler it's better to use https://docs.rs/static_cell/2.1.0/static_cell/macro.make_static.html
 macro_rules! mk_static {
     ($t:ty,$val:expr) => {{
         static STATIC_CELL: static_cell::StaticCell<$t> = static_cell::StaticCell::new();
@@ -59,17 +61,37 @@ pub trait ClockfaceTrait {
 }
 
 #[main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     let software_interrupt = sw_ints.software_interrupt2;
 
-    heap_allocator!(72 * 1024);
+    heap_allocator!(size: 72 * 1024);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let _timg1 = TimerGroup::new(peripherals.TIMG1);
+    let timg1 = TimerGroup::new(peripherals.TIMG1);
 
-    esp_hal_embassy::init(timg0.timer0);
+    let stack = connect_to_wifi(
+        peripherals.WIFI,
+        timg1.timer0,
+        peripherals.RADIO_CLK,
+        peripherals.RNG,
+        spawner,
+    )
+    .await
+    .expect("Failed to connect to WiFi");
+
+    if let Some(stack_config) = stack.config_v4() {
+        println!("Client IP: {}", stack_config.address);
+    } else {
+        println!("Failed to get stack config");
+    }
+
+    esp_hal_embassy::init([timg0.timer0, timg0.timer1]);
+
+    let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
+
+    static mut APP_CORE_STACK: Stack<8192> = Stack::new();
 
     println!("init framebuffer exchange");
     static TX: FrameBufferExchange = FrameBufferExchange::new();
@@ -99,38 +121,20 @@ async fn main(_spawner: Spawner) {
         clock: peripherals.GPIO12.degrade(),
         latch: peripherals.GPIO10.degrade(),
     };
-    // run hub75 and display on second core
-    let cpu1_fnctn = {
-        move || {
-            use esp_hal_embassy::Executor;
-            let hp_executor = mk_static!(
+
+    spawner.spawn(display_task(&TX, &RX, fb0)).ok();
+
+    let _guard = cpu_control
+        .start_app_core(unsafe { &mut *addr_of_mut!(APP_CORE_STACK) }, move || {
+            let executor = mk_static!(
                 InterruptExecutor<2>,
                 InterruptExecutor::new(software_interrupt)
             );
-            let high_pri_spawner = hp_executor.start(Priority::Priority3);
-
-            // hub75 runs as high priority task
+            let high_pri_spawner = executor.start(Priority::Priority3);
             high_pri_spawner
-                .spawn(hub75_task::hub75_task(hub75_peripherals, &RX, &TX, fb1))
+                .spawn(hub75_task(hub75_peripherals, &RX, &TX, fb1))
                 .ok();
-
-            let lp_executor = mk_static!(Executor, Executor::new());
-            // display task runs as low priority task
-            lp_executor.run(|spawner| {
-                spawner
-                    .spawn(display_task::display_task(&TX, &RX, fb0))
-                    .ok();
-            });
-        }
-    };
-
-    const DISPLAY_STACK_SIZE: usize = 8192;
-    let app_core_stack = mk_static!(Stack<DISPLAY_STACK_SIZE>, Stack::new());
-    let mut _cpu_control = CpuControl::new(peripherals.CPU_CTRL);
-
-    #[allow(static_mut_refs)]
-    let _guard = _cpu_control
-        .start_app_core(app_core_stack, cpu1_fnctn)
+        })
         .unwrap();
 
     loop {

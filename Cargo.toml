@@ -26,7 +26,7 @@ esp-wifi = { version = "0.13.0", features = [
     "wifi",
     "log",
 ] }
-esp-alloc = { version = "0.6.0" }
+esp-alloc = { version = "0.7.0" }
 esp-backtrace = { version = "0.15.1", features = [
     "esp32s3",
     "exception-handler",
@@ -35,6 +35,13 @@ esp-backtrace = { version = "0.15.1", features = [
 ] }
 embedded-graphics = { version = "0.8.1", features = [] }
 embedded-hal = { version = "1.0.0", features = [] }
+embassy-net = { version = "0.6.0", features = [
+    "tcp",
+    "udp",
+    "dns",
+    "dhcpv4",
+    "dhcpv4-hostname",
+] }
 
 [profile.dev]
 # Rust debug is too slow.
