@@ -10,8 +10,10 @@ use esp_alloc::{heap_allocator, psram_allocator};
 use esp_backtrace as _;
 use esp_hal::{
     gpio::Pin,
+    i2c::master::{Config, I2c},
     interrupt::{software::SoftwareInterruptControl, Priority},
     system::{CpuControl, Stack},
+    time::Rate,
     timer::timg::TimerGroup,
 };
 use esp_hal_embassy::{main, InterruptExecutor};
@@ -19,6 +21,7 @@ use esp_hub75::framebuffer::DmaFrameBuffer;
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows};
 use esp_println::println;
 use hub75_task::{hub75_task, Hub75Peripherals};
+use pcf8563::Pcf8563;
 use wifi_task::connect_to_wifi;
 
 mod display_task;
@@ -60,6 +63,19 @@ pub trait ClockfaceTrait {
 #[main]
 async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(esp_hal::Config::default());
+
+    // --- RTC Initialization Start ---
+    println!("Initializing I2C for BM8563 RTC...");
+    let config = Config::default().with_frequency(Rate::from_khz(100));
+    let i2c = I2c::new(peripherals.I2C0, config)
+        .expect("Unable to create I2C instance")
+        .with_scl(peripherals.GPIO42)
+        .with_sda(peripherals.GPIO41);
+
+    // Create the RTC driver instance
+    let mut rtc = Pcf8563::new(i2c);
+    let current_time = rtc.datetime().expect("Failed to read RTC time");
+    println!("Current RTC time: {:?}", current_time);
 
     heap_allocator!(size: 72 * 1024);
 

@@ -4,6 +4,7 @@ use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
+use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::{
     pixelcolor::Rgb888,
     prelude::{Point, Primitive, Size},
@@ -50,17 +51,13 @@ pub fn millis() -> u64 {
 // Helper function to convert RGB565 to RGB888
 #[inline]
 pub fn rgb565_to_rgb888(color: u16) -> Rgb888 {
-    // Extract RGB components from RGB565
+    // Extract 5-bit red, 6-bit green, and 5-bit blue.
     let r5 = ((color >> 11) & 0x1F) as u8;
     let g6 = ((color >> 5) & 0x3F) as u8;
     let b5 = (color & 0x1F) as u8;
+    let rgb565: Rgb565 = Rgb565::new(r5, g6, b5);
 
-    // Convert to RGB888 using bit-shifting approximation
-    let r8 = (r5 << 3) | (r5 >> 2); // Map 5 bits to 8 bits
-    let g8 = (g6 << 2) | (g6 >> 4); // Map 6 bits to 8 bits
-    let b8 = (b5 << 3) | (b5 >> 2); // Map 5 bits to 8 bits
-
-    Rgb888::new(r8, g8, b8)
+    rgb565.into()
 }
 
 pub fn draw_rgb_bitmap(

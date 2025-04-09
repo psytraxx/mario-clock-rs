@@ -42,7 +42,7 @@ embassy-net = { version = "0.6.0", features = [
     "dhcpv4",
     "dhcpv4-hostname",
 ] }
-
+pcf8563 = { git = "https://github.com/hyx0329/pcf8563-rs.git", branch = "dev" }
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
