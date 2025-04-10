@@ -2,7 +2,10 @@
 #![no_main]
 
 use core::{future::Future, sync::atomic::AtomicU32};
-use display_task::display_task;
+use display::{
+    display_task::display_task,
+    hub75_task::{hub75_task, Hub75Peripherals},
+};
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
@@ -20,13 +23,11 @@ use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::DmaFrameBuffer;
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows};
 use esp_println::println;
-use hub75_task::{hub75_task, Hub75Peripherals};
 use pcf8563::Pcf8563;
 use wifi_task::connect_to_wifi;
 
-mod display_task;
+mod display;
 mod engine;
-mod hub75_task;
 mod mario;
 mod wifi_task;
 
