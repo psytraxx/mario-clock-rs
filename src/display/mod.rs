@@ -4,17 +4,16 @@ pub mod hub75_task;
 use crate::mario::gfx::font::SUPER_MARIO_BROS_24PT;
 use crate::{FBType, GRID_SIZE};
 
-use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::{
+    pixelcolor::Rgb565,
     pixelcolor::Rgb888,
     prelude::{Point, Primitive, Size},
     primitives::{PrimitiveStyleBuilder, Rectangle},
     Drawable, Pixel,
 };
 
-// Helper function to convert RGB565 to RGB888
-#[inline]
-pub fn rgb565_to_rgb888(color: u16) -> Rgb888 {
+// Helper function to convert RGB565 u16 value  to RGB888
+fn to_rgb888(color: u16) -> Rgb888 {
     // Extract 5-bit red, 6-bit green, and 5-bit blue.
     let r5 = ((color >> 11) & 0x1F) as u8;
     let g6 = ((color >> 5) & 0x3F) as u8;
@@ -52,7 +51,7 @@ pub fn draw_rgb_bitmap(
             }
 
             // Use the helper from this module
-            let rgb888_color = rgb565_to_rgb888(rgb565_color);
+            let rgb888_color = to_rgb888(rgb565_color);
 
             // Calculate the target point on the framebuffer
             let target_point = start_point + Point::new(col as i32, row as i32);
@@ -73,7 +72,7 @@ pub fn fill_rect(fb: &mut FBType, x: i32, y: i32, width: u32, height: u32, color
     let start_point = Point::new(x, y);
     let size = Size::new(width, height);
     let style = PrimitiveStyleBuilder::new()
-        .fill_color(rgb565_to_rgb888(color565))
+        .fill_color(to_rgb888(color565))
         .build();
     Rectangle::new(start_point, size)
         .into_styled(style)
@@ -85,7 +84,7 @@ pub fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: u16) {
     let font = SUPER_MARIO_BROS_24PT;
     let mut cursor_x = x;
     let cursor_y = y;
-    let color = rgb565_to_rgb888(color565);
+    let color = to_rgb888(color565);
 
     for c in text.chars() {
         if c < font.first as char || c > font.last as char {
