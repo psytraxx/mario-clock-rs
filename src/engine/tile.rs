@@ -2,7 +2,7 @@ use crate::{display::draw_rgb_bitmap, FBType, GRID_SIZE};
 
 /// Tiles are used to represent static elements of the game world,
 /// such as the ground, walls, or other background elements.
-pub struct Tile {
+pub(crate) struct Tile {
     image: &'static [u16],
     width: i32,
     height: i32,

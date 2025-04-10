@@ -16,7 +16,7 @@ use super::gfx::{
 static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4>> =
     StaticCell::new();
 
-pub struct Clockface {
+pub(crate) struct Clockface {
     ground: Tile,
     bush: Object,
     cloud1: Object,

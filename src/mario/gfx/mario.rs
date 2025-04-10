@@ -20,7 +20,7 @@ enum State {
     Jumping,
 }
 
-pub struct Mario {
+pub(crate) struct Mario {
     x: i32,
     y: i32,
     width: i32,

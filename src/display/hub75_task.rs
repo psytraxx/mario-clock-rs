@@ -10,7 +10,7 @@ use crate::{FBType, FrameBufferExchange, REFRESH_RATE};
 
 type Hub75Type = Hub75<'static, esp_hal::Async>;
 
-pub struct Hub75Peripherals {
+pub(crate) struct Hub75Peripherals {
     pub lcd_cam: LCD_CAM,
     pub dma_channel: esp_hal::dma::DmaChannel0,
     pub red1: AnyPin,
@@ -30,7 +30,7 @@ pub struct Hub75Peripherals {
 }
 
 #[task]
-pub async fn hub75_task(
+pub(crate) async fn hub75_task(
     peripherals: Hub75Peripherals,
     rx: &'static FrameBufferExchange,
     tx: &'static FrameBufferExchange,

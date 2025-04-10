@@ -23,7 +23,7 @@ fn to_rgb888(color: u16) -> Rgb888 {
     rgb565.into()
 }
 
-pub fn draw_rgb_bitmap(
+pub(crate) fn draw_rgb_bitmap(
     fb: &mut FBType,
     x: i32,
     y: i32,
@@ -68,7 +68,7 @@ pub fn draw_rgb_bitmap(
     }
 }
 
-pub fn fill_rect(fb: &mut FBType, x: i32, y: i32, width: u32, height: u32, color565: u16) {
+pub(crate) fn fill_rect(fb: &mut FBType, x: i32, y: i32, width: u32, height: u32, color565: u16) {
     let start_point = Point::new(x, y);
     let size = Size::new(width, height);
     let style = PrimitiveStyleBuilder::new()
@@ -80,7 +80,7 @@ pub fn fill_rect(fb: &mut FBType, x: i32, y: i32, width: u32, height: u32, color
         .expect("Failed to draw rectangle");
 }
 
-pub fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: u16) {
+pub(crate) fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: u16) {
     let font = SUPER_MARIO_BROS_24PT;
     let mut cursor_x = x;
     let cursor_y = y;

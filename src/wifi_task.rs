@@ -18,7 +18,7 @@ use static_cell::StaticCell;
 static STACK_RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 
 /// Signal to request to stop WiFi
-pub static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+pub(crate) static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 pub async fn connect_to_wifi(
     wifi: peripherals::WIFI,

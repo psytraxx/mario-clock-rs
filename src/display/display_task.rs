@@ -7,7 +7,7 @@ use crate::mario::clockface::Clockface;
 use crate::{ClockfaceTrait, FBType, FrameBufferExchange, REFRESH_RATE};
 
 #[task]
-pub async fn display_task(
+pub(crate) async fn display_task(
     rx: &'static FrameBufferExchange,
     tx: &'static FrameBufferExchange,
     mut fb: &'static mut FBType,

@@ -8,7 +8,7 @@ pub mod tile;
 
 // Type definitions and basic structs
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Direction {
+pub(crate) enum Direction {
     Up,
     Down,
     //Left,
@@ -16,7 +16,7 @@ pub enum Direction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpriteInfo {
+pub(crate) struct SpriteInfo {
     pub name: &'static str,
     pub x: i8,
     pub y: i8,
@@ -25,13 +25,13 @@ pub struct SpriteInfo {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Event {
+pub(crate) enum Event {
     Move(SpriteInfo),
     Collision(SpriteInfo),
 }
 
 // Utility functions
-pub fn millis() -> u64 {
+pub(crate) fn millis() -> u64 {
     /*    SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .unwrap()
@@ -40,7 +40,7 @@ pub fn millis() -> u64 {
 }
 
 // Core sprite trait
-pub trait Sprite: Send + Sync {
+pub(crate) trait Sprite: Send + Sync {
     // Required properties
     fn x(&self) -> i8;
     fn y(&self) -> i8;
@@ -76,7 +76,7 @@ pub trait Sprite: Send + Sync {
 pub mod font {
     // Font related structs
     #[derive(Debug, Clone)]
-    pub struct GFXfont<'a> {
+    pub(crate) struct GFXfont<'a> {
         pub bitmap: &'a [u8],
         pub glyph: &'a [GFXglyph],
         pub first: u8,
@@ -84,7 +84,7 @@ pub mod font {
     }
 
     #[derive(Debug, Clone, Copy)]
-    pub struct GFXglyph {
+    pub(crate) struct GFXglyph {
         pub bitmap_offset: u16,
         pub width: u8,
         pub height: u8,

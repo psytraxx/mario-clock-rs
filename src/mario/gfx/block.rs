@@ -19,7 +19,7 @@ enum State {
     Hit,
 }
 
-pub struct Block {
+pub(crate) struct Block {
     x: i32,
     y: i32,
     width: i32,

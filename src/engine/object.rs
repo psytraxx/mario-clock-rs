@@ -2,7 +2,7 @@ use crate::{display::draw_rgb_bitmap, FBType};
 
 /// Objects are used to represent interactive elements within the
 /// game world, such as characters, items, or obstacles.
-pub struct Object {
+pub(crate) struct Object {
     image: &'static [u16],
     width: i32,
     height: i32,
