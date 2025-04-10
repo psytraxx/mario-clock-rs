@@ -93,6 +93,10 @@ impl NtpClock<'_> {
         DateTime::from_timestamp_micros(time_us).unwrap()
     }
 
+    pub fn get_time_in_zone(&self, zone: chrono_tz::Tz) -> DateTime<chrono_tz::Tz> {
+        self.get_time().with_timezone(&zone)
+    }
+
     async fn dns_query(stack: &Stack<'_>, domain: &str) -> Result<Ipv4Address, dns::Error> {
         stack
             .dns_query(domain, embassy_net::dns::DnsQueryType::A)

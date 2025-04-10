@@ -170,7 +170,7 @@ async fn main(spawner: Spawner) {
     let mut clock_buffs = ClockBuffs::default();
     let clock = NtpClock::sync(stack, &mut clock_buffs).await.unwrap();
 
-    let t = clock.get_time();
+    let t = clock.get_time_in_zone(chrono_tz::Europe::Zurich);
     println!("NTP time: {:?}", t);
 
     rtc.set_datetime(&DateTime {
