@@ -1,15 +1,13 @@
-use super::assets::{BLOCK, SKY_COLOR};
+use super::assets::{BLACK, BLOCK, SKY_COLOR};
 use crate::{
-    engine::{
-        draw_rgb_bitmap, fill_rect, millis, print, rgb565_to_rgb888, Direction, Event, Sprite,
-    },
+    display::{draw_rgb_bitmap, fill_rect, print_text},
+    engine::{millis, Direction, Event, Sprite},
     FBType,
 };
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
-use embedded_graphics::{pixelcolor::Rgb888, prelude::RgbColor};
 use heapless::String;
 
 const MOVE_PACE: u8 = 2;
@@ -92,9 +90,9 @@ impl Block {
 
     fn set_text_block(&self, fb: &mut FBType) {
         if self.text.len() == 1 {
-            print(fb, &self.text, self.x + 6, self.y + 12, Rgb888::BLACK);
+            print_text(fb, &self.text, self.x + 6, self.y + 12, BLACK);
         } else {
-            print(fb, &self.text, self.x + 2, self.y + 12, Rgb888::BLACK);
+            print_text(fb, &self.text, self.x + 2, self.y + 12, BLACK);
         }
     }
 
@@ -122,7 +120,7 @@ impl Block {
                 self.y,
                 self.width as u32,
                 self.height as u32,
-                rgb565_to_rgb888(SKY_COLOR),
+                SKY_COLOR,
             );
 
             self.y += MOVE_PACE as i32

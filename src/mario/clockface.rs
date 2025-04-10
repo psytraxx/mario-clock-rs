@@ -2,10 +2,9 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubC
 use static_cell::StaticCell;
 
 use crate::{
-    engine::{fill_rect, object::Object, rgb565_to_rgb888, tile::Tile, Event, Sprite}, // Keep others
-    ClockfaceTrait,
-    FBType,
-    GRID_SIZE,
+    display::fill_rect,
+    engine::{object::Object, tile::Tile, Event, Sprite},
+    ClockfaceTrait, FBType, GRID_SIZE,
 };
 
 use super::gfx::{
@@ -67,14 +66,7 @@ impl Clockface {
 
 impl ClockfaceTrait for Clockface {
     fn setup(&mut self, fb: &mut FBType) {
-        fill_rect(
-            fb,
-            0,
-            0,
-            GRID_SIZE as u32,
-            GRID_SIZE as u32,
-            rgb565_to_rgb888(SKY_COLOR),
-        );
+        fill_rect(fb, 0, 0, GRID_SIZE as u32, GRID_SIZE as u32, SKY_COLOR);
 
         // Initialize scene
         self.ground

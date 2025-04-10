@@ -1,4 +1,4 @@
-use crate::{engine::draw_rgb_bitmap, FBType};
+use crate::{display::draw_rgb_bitmap, FBType};
 
 /// Objects are used to represent interactive elements within the
 /// game world, such as characters, items, or obstacles.

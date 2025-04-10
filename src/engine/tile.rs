@@ -1,4 +1,4 @@
-use crate::{engine::draw_rgb_bitmap, FBType, GRID_SIZE};
+use crate::{display::draw_rgb_bitmap, FBType, GRID_SIZE};
 
 /// Tiles are used to represent static elements of the game world,
 /// such as the ground, walls, or other background elements.

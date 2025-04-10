@@ -1,5 +1,6 @@
 use crate::{
-    engine::{draw_rgb_bitmap, fill_rect, millis, rgb565_to_rgb888, Direction, Event, Sprite},
+    display::{draw_rgb_bitmap, fill_rect},
+    engine::{millis, Direction, Event, Sprite},
     FBType,
 };
 use embassy_sync::{
@@ -84,7 +85,7 @@ impl Mario {
                 self.y,
                 self.width as u32,
                 self.height as u32,
-                rgb565_to_rgb888(SKY_COLOR),
+                SKY_COLOR,
             );
 
             self.width = MARIO_JUMP_SIZE[0] as i32;
@@ -108,7 +109,7 @@ impl Mario {
                 self.y,
                 self.width as u32,
                 self.height as u32,
-                rgb565_to_rgb888(SKY_COLOR),
+                SKY_COLOR,
             );
 
             self.width = MARIO_IDLE_SIZE[0] as i32;
@@ -143,7 +144,7 @@ impl Mario {
                 self.y,
                 self.width as u32,
                 self.height as u32,
-                rgb565_to_rgb888(SKY_COLOR),
+                SKY_COLOR,
             );
 
             self.y += MARIO_PACE as i32
