@@ -19,6 +19,7 @@ esp-hal = { version = "1.0.0-beta.0", features = [
 ] }
 esp-hub75 = { git = "https://github.com/liebman/esp-hub75.git", branch = "main", features = [
     "esp32s3",
+    "log",
 ] }
 esp-wifi = { version = "0.13.0", features = [
     "esp32s3",

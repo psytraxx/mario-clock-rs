@@ -588,6 +588,7 @@ dependencies = [
  "embedded-hal-async",
  "esp-build",
  "esp-hal",
+ "log",
  "static_cell",
 ]
 
