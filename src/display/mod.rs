@@ -1,8 +1,8 @@
 pub mod display_task;
 pub mod hub75_task;
 
-use crate::mario::gfx::font::SUPER_MARIO_BROS_24PT;
-use crate::{FBType, GRID_SIZE};
+use crate::{mario::gfx::font::SUPER_MARIO_BROS_24PT, ROWS};
+use crate::{FBType, COLS};
 
 use embedded_graphics::{
     pixelcolor::Rgb565,
@@ -58,9 +58,9 @@ pub(crate) fn draw_rgb_bitmap(
 
             // Draw the single pixel if it's within the framebuffer bounds
             if target_point.x >= 0
-                && target_point.x < GRID_SIZE as i32
+                && target_point.x < ROWS as i32
                 && target_point.y >= 0
-                && target_point.y < GRID_SIZE as i32
+                && target_point.y < COLS as i32
             {
                 Pixel(target_point, rgb888_color).draw(fb).ok(); // Ignore errors
             }
@@ -97,7 +97,7 @@ pub(crate) fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: 
 
         for row in 0..glyph.height {
             let dest_y = cursor_y + glyph.y_offset as i32 + row as i32;
-            if dest_y < 0 || dest_y >= GRID_SIZE as i32 {
+            if dest_y < 0 || dest_y >= COLS as i32 {
                 continue;
             }
 
@@ -105,7 +105,7 @@ pub(crate) fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: 
 
             for col in 0..glyph.width {
                 let dest_x = cursor_x + glyph.x_offset as i32 + col as i32;
-                if dest_x < 0 || dest_x >= GRID_SIZE as i32 {
+                if dest_x < 0 || dest_x >= ROWS as i32 {
                     continue;
                 }
 

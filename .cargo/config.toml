@@ -6,8 +6,6 @@ ESP_LOG = "INFO"
 ESP_WIFI_COUNTRY_CODE = "DE"
 WIFI_SSID = "1234"
 WIFI_PSK = "1245"
-ESP_HAL_PLACE_SPI_DRIVER_IN_RAM = "true"
-ESP_HAL_CONFIG_PSRAM_MODE = "quad"
 
 [build]
 rustflags = ["-C", "link-arg=-nostartfiles"]

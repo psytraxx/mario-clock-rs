@@ -9,7 +9,7 @@ use display::{
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use esp_alloc::{heap_allocator, psram_allocator};
+use esp_alloc::heap_allocator;
 use esp_backtrace as _;
 use esp_hal::{
     gpio::Pin,
@@ -33,10 +33,9 @@ mod wifi_task;
 
 extern crate alloc;
 
-const GRID_SIZE: usize = 64;
 const ROWS: usize = 64;
 const COLS: usize = 64;
-const BITS: u8 = 4;
+const BITS: u8 = 2;
 const NROWS: usize = compute_rows(ROWS);
 const FRAME_COUNT: usize = compute_frame_count(BITS);
 
@@ -84,25 +83,6 @@ async fn main(spawner: Spawner) {
     let timg1 = TimerGroup::new(peripherals.TIMG1);
 
     esp_hal_embassy::init([timg0.timer0, timg0.timer1]);
-
-    // Initialize the PSRAM allocator for extra memory requirements
-    psram_allocator!(peripherals.PSRAM, esp_hal::psram);
-
-    let stack = connect_to_wifi(
-        peripherals.WIFI,
-        timg1.timer0,
-        peripherals.RADIO_CLK,
-        peripherals.RNG,
-        spawner,
-    )
-    .await
-    .expect("Failed to connect to WiFi");
-
-    if let Some(stack_config) = stack.config_v4() {
-        println!("Client IP: {}", stack_config.address);
-    } else {
-        println!("Failed to get stack config");
-    }
 
     let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     let software_interrupt = sw_ints.software_interrupt2;
@@ -167,6 +147,22 @@ async fn main(spawner: Spawner) {
     let _guard = _cpu_control
         .start_app_core(app_core_stack, cpu1_fnctn)
         .unwrap();
+
+    let stack = connect_to_wifi(
+        peripherals.WIFI,
+        timg1.timer0,
+        peripherals.RADIO_CLK,
+        peripherals.RNG,
+        spawner,
+    )
+    .await
+    .expect("Failed to connect to WiFi");
+
+    if let Some(stack_config) = stack.config_v4() {
+        println!("Client IP: {}", stack_config.address);
+    } else {
+        println!("Failed to get stack config");
+    }
 
     loop {
         // The main task keeps running so the executor doesn't exit

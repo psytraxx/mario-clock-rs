@@ -4,7 +4,7 @@ use static_cell::StaticCell;
 use crate::{
     display::fill_rect,
     engine::{object::Object, tile::Tile, Event, Sprite},
-    ClockfaceTrait, FBType, GRID_SIZE,
+    ClockfaceTrait, FBType, COLS, ROWS,
 };
 
 use super::gfx::{
@@ -66,11 +66,10 @@ impl Clockface {
 
 impl ClockfaceTrait for Clockface {
     fn setup(&mut self, fb: &mut FBType) {
-        fill_rect(fb, 0, 0, GRID_SIZE as u32, GRID_SIZE as u32, SKY_COLOR);
+        fill_rect(fb, 0, 0, ROWS as u32, COLS as u32, SKY_COLOR);
 
         // Initialize scene
-        self.ground
-            .fill_row(GRID_SIZE as i32 - self.ground.height(), fb);
+        self.ground.fill_row(COLS as i32 - self.ground.height(), fb);
         self.bush.draw(43, 47, fb);
         self.hill.draw(0, 34, fb);
         self.cloud1.draw(0, 21, fb);

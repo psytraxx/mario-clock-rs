@@ -1,4 +1,4 @@
-use crate::{display::draw_rgb_bitmap, FBType, GRID_SIZE};
+use crate::{display::draw_rgb_bitmap, FBType, ROWS};
 
 /// Tiles are used to represent static elements of the game world,
 /// such as the ground, walls, or other background elements.
@@ -18,7 +18,7 @@ impl Tile {
     }
 
     pub fn fill_row(&self, y: i32, fb: &mut FBType) {
-        for x in (0..GRID_SIZE).step_by(self.width as usize) {
+        for x in (0..ROWS).step_by(self.width as usize) {
             draw_rgb_bitmap(fb, x as i32, y, self.image, self.width, self.height);
         }
     }

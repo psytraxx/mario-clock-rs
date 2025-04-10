@@ -13,7 +13,6 @@ esp-println = { version = "0.13.1", features = ["log", "esp32s3"] }
 esp-hal-embassy = { version = "0.7.0", features = ["esp32s3"] }
 esp-hal = { version = "1.0.0-beta.0", features = [
     "esp32s3",
-    "psram",
     "unstable",
     "log",
 ] }
