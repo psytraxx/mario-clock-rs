@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use chrono::{Datelike, Timelike};
+use clock::{ClockBuffs, NtpClock};
 use core::{future::Future, sync::atomic::AtomicU32};
 use display::{
     display_task::display_task,
@@ -23,9 +25,10 @@ use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::DmaFrameBuffer;
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows};
 use esp_println::println;
-use pcf8563::Pcf8563;
-use wifi_task::connect_to_wifi;
+use pcf8563::DateTime;
+use wifi_task::{connect_to_wifi, STOP_WIFI_SIGNAL};
 
+mod clock;
 mod display;
 mod engine;
 mod mario;
@@ -72,9 +75,10 @@ async fn main(spawner: Spawner) {
         .with_scl(peripherals.GPIO42)
         .with_sda(peripherals.GPIO41);
 
+    let mut rtc = pcf8563::PCF8563::new(i2c);
+
     // Create the RTC driver instance
-    let mut rtc = Pcf8563::new(i2c);
-    let current_time = rtc.datetime().expect("Failed to read RTC time");
+    let current_time = rtc.get_datetime().expect("Failed to read RTC time");
     println!("Current RTC time: {:?}", current_time);
 
     heap_allocator!(size: 72 * 1024);
@@ -163,6 +167,26 @@ async fn main(spawner: Spawner) {
     } else {
         println!("Failed to get stack config");
     }
+    let mut clock_buffs = ClockBuffs::default();
+    let clock = NtpClock::sync(stack, &mut clock_buffs).await.unwrap();
+
+    let t = clock.get_time();
+    println!("NTP time: {:?}", t);
+
+    rtc.set_datetime(&DateTime {
+        hours: t.hour() as u8,
+        minutes: t.minute() as u8,
+        seconds: t.second() as u8,
+        year: (t.year() - 2000) as u8,
+        month: t.month() as u8,
+        day: t.day() as u8,
+        weekday: t.weekday() as u8,
+    })
+    .expect("Failed to set RTC time");
+
+    println!("Request to disconnect wifi");
+
+    STOP_WIFI_SIGNAL.signal(());
 
     loop {
         // The main task keeps running so the executor doesn't exit
