@@ -2,6 +2,7 @@ use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
+use embassy_time::Instant;
 
 pub mod object;
 pub mod tile;
@@ -32,11 +33,7 @@ pub(crate) enum Event {
 
 // Utility functions
 pub(crate) fn millis() -> u64 {
-    /*    SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .unwrap()
-    .as_millis() as u64 */
-    0
+    Instant::now().as_millis()
 }
 
 // Core sprite trait

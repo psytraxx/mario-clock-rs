@@ -1,10 +1,14 @@
 use chrono::{DateTime, Utc};
 use core::net::SocketAddrV4;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{dns, IpAddress, Ipv4Address, Stack};
 use embassy_time::Instant;
 use esp_println::println;
 use sntpc::{sntp_process_response, sntp_send_request, NtpContext, NtpTimestampGenerator};
+
+// Atomic variable to store the offset between embassy time and the "real" time
+static TIME_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
 pub struct ClockBuffs {
     rx_meta: [PacketMetadata; 16],
@@ -144,4 +148,30 @@ impl NtpTimestampGenerator for TimeStampGen {
     fn timestamp_subsec_micros(&self) -> u32 {
         microseconds_to_micros_frac(self.val).try_into().unwrap()
     }
+}
+
+pub fn store_offset(datetime: pcf8563::DateTime) {
+    let year = datetime.year as i32 + 2000; // pcf8563 year is since 2000
+    let month = datetime.month as u32;
+    let day = datetime.day as u32;
+    let hour = datetime.hours as u32;
+    let minute = datetime.minutes as u32;
+    let second = datetime.seconds as u32;
+
+    // Use chrono to create a DateTime object
+    let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)
+        .and_then(|date| date.and_hms_opt(hour, minute, second))
+        .unwrap();
+
+    // Convert to DateTime<Utc>
+    let datetime_utc: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, chrono::Utc);
+    // Get the Unix timestamp (seconds since epoch)
+    TIME_OFFSET.store(datetime_utc.timestamp() as usize, Ordering::Relaxed);
+}
+
+pub fn get_now() -> u64 {
+    let now = embassy_time::Instant::now().as_secs();
+
+    now.checked_add(TIME_OFFSET.load(Ordering::Relaxed) as u64)
+        .expect("Time offset overflow")
 }

@@ -2,7 +2,7 @@
 #![no_main]
 
 use chrono::{Datelike, Timelike};
-use clock::{ClockBuffs, NtpClock};
+use clock::{store_offset, ClockBuffs, NtpClock};
 use core::{future::Future, sync::atomic::AtomicU32};
 use display::{
     display_task::display_task,
@@ -80,6 +80,8 @@ async fn main(spawner: Spawner) {
     // Create the RTC driver instance
     let current_time = rtc.get_datetime().expect("Failed to read RTC time");
     println!("Current RTC time: {:?}", current_time);
+
+    store_offset(current_time);
 
     heap_allocator!(size: 72 * 1024);
 

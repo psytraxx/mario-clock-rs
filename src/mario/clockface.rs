@@ -1,7 +1,9 @@
+use alloc::format;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use static_cell::StaticCell;
 
 use crate::{
+    clock::get_now,
     display::fill_rect,
     engine::{object::Object, tile::Tile, Event, Sprite},
     ClockfaceTrait, FBType, COLS, ROWS,
@@ -51,16 +53,14 @@ impl Clockface {
     }
 
     fn update_time(&mut self) {
-        /*
-        let date_time =
-            Utc::now().with_timezone(&chrono::FixedOffset::east_opt(3600).expect("Invalid offset"));
-        self.hour_block.set_text(date_time.hour().to_string());
-        self.minute_block
-            .set_text(format!("{:02}", date_time.minute()));
-        */
+        let now = get_now();
 
-        self.hour_block.set_text("00");
-        self.minute_block.set_text("00");
+        let hours = (now / 3600) % 24;
+        let minutes = (now / 60) % 60;
+
+        self.hour_block.set_text(format!("{:02}", hours).as_str());
+        self.minute_block
+            .set_text(format!("{:02}", minutes).as_str());
     }
 }
 
@@ -86,10 +86,10 @@ impl ClockfaceTrait for Clockface {
         self.hour_block.update(fb).await;
         self.minute_block.update(fb).await;
         self.mario.update(fb).await;
-
-        //if Utc::now().second() == 0 {
-        self.mario.jump(fb);
-        self.update_time();
-        //}
+        //TODO: modulo 60
+        if get_now() % 10 == 0 {
+            self.mario.jump(fb);
+            self.update_time();
+        }
     }
 }
