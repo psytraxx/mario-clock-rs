@@ -1,12 +1,13 @@
 use alloc::format;
+use chrono::Timelike;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use static_cell::StaticCell;
 
 use crate::{
-    clock::get_now,
+    clock::Clock,
     display::fill_rect,
     engine::{object::Object, tile::Tile, Event, Sprite},
-    ClockfaceTrait, FBType, COLS, ROWS,
+    ClockfaceTrait, FBType, I2CType, COLS, ROWS,
 };
 
 use super::gfx::{
@@ -52,15 +53,17 @@ impl Clockface {
         }
     }
 
+    fn now() -> chrono::DateTime<chrono_tz::Tz> {
+        Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich)
+    }
+
     fn update_time(&mut self) {
-        let now = get_now();
+        let now = Clockface::now();
 
-        let hours = (now / 3600) % 24;
-        let minutes = (now / 60) % 60;
-
-        self.hour_block.set_text(format!("{:02}", hours).as_str());
+        self.hour_block
+            .set_text(format!("{:02}", now.hour()).as_str());
         self.minute_block
-            .set_text(format!("{:02}", minutes).as_str());
+            .set_text(format!("{:02}", now.minute()).as_str());
     }
 }
 
@@ -86,8 +89,11 @@ impl ClockfaceTrait for Clockface {
         self.hour_block.update(fb).await;
         self.minute_block.update(fb).await;
         self.mario.update(fb).await;
+
+        let now = Clockface::now();
+
         //TODO: modulo 60
-        if get_now() % 10 == 0 {
+        if now.second() % 10 == 0 {
             self.mario.jump(fb);
             self.update_time();
         }

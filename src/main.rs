@@ -1,8 +1,7 @@
 #![no_std]
 #![no_main]
 
-use chrono::{Datelike, Timelike};
-use clock::{store_offset, ClockBuffs, NtpClock};
+use clock::{Clock, ClockBuffs};
 use core::{future::Future, sync::atomic::AtomicU32};
 use display::{
     display_task::display_task,
@@ -20,12 +19,12 @@ use esp_hal::{
     system::{CpuControl, Stack},
     time::Rate,
     timer::timg::TimerGroup,
+    Blocking,
 };
 use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::DmaFrameBuffer;
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows};
 use esp_println::println;
-use pcf8563::DateTime;
 use wifi_task::{connect_to_wifi, STOP_WIFI_SIGNAL};
 
 mod clock;
@@ -46,6 +45,7 @@ const FRAME_COUNT: usize = compute_frame_count(BITS);
 // Define a fixed-size buffer type for the display
 type FBType = DmaFrameBuffer<ROWS, COLS, NROWS, BITS, FRAME_COUNT>;
 type FrameBufferExchange = Signal<CriticalSectionRawMutex, &'static mut FBType>;
+pub type I2CType = I2c<'static, Blocking>;
 
 macro_rules! mk_static {
     ($t:ty,$val:expr) => {{
@@ -74,14 +74,6 @@ async fn main(spawner: Spawner) {
         .expect("Unable to create I2C instance")
         .with_scl(peripherals.GPIO42)
         .with_sda(peripherals.GPIO41);
-
-    let mut rtc = pcf8563::PCF8563::new(i2c);
-
-    // Create the RTC driver instance
-    let current_time = rtc.get_datetime().expect("Failed to read RTC time");
-    println!("Current RTC time: {:?}", current_time);
-
-    store_offset(current_time);
 
     heap_allocator!(size: 72 * 1024);
 
@@ -170,21 +162,14 @@ async fn main(spawner: Spawner) {
         println!("Failed to get stack config");
     }
     let mut clock_buffs = ClockBuffs::default();
-    let clock = NtpClock::sync(stack, &mut clock_buffs).await.unwrap();
+    let mut clock = Clock::<I2CType>::new(i2c);
+    clock
+        .sync_ntp(stack, &mut clock_buffs)
+        .await
+        .expect("Failed to sync NTP");
 
-    let t = clock.get_time_in_zone(chrono_tz::Europe::Zurich);
-    println!("NTP time: {:?}", t);
-
-    rtc.set_datetime(&DateTime {
-        hours: t.hour() as u8,
-        minutes: t.minute() as u8,
-        seconds: t.second() as u8,
-        year: (t.year() - 2000) as u8,
-        month: t.month() as u8,
-        day: t.day() as u8,
-        weekday: t.weekday() as u8,
-    })
-    .expect("Failed to set RTC time");
+    let time = Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich);
+    println!("Current time: {}", time);
 
     println!("Request to disconnect wifi");
 
