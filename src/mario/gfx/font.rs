@@ -807,7 +807,6 @@ pub const SUPER_MARIO_BROS_24PT_GLYPHS: &[GFXglyph] = &[
 pub const SUPER_MARIO_BROS_24PT: GFXfont = GFXfont {
     bitmap: SUPER_MARIO_BROS_24PT_BITMAPS,
     glyph: SUPER_MARIO_BROS_24PT_GLYPHS,
-    first: 0x20,  // First ASCII character (space)
-    last: 0x7E,   // Last ASCII character (tilde)
-    y_advance: 9, // Newline distance
+    first: 0x20, // First ASCII character (space)
+    last: 0x7E,  // Last ASCII character (tilde)
 };

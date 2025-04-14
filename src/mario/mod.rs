@@ -1,2 +1,2 @@
 pub mod clockface;
-mod gfx;
+pub mod gfx;

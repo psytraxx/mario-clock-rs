@@ -1,17 +1,25 @@
+use alloc::format;
+use chrono::Timelike;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
+use static_cell::StaticCell;
+
 use crate::{
-    engine::{create_event_channel, display::Display, object::Object, tile::Tile, Sprite},
-    ClockfaceTrait, GRID_SIZE,
+    clock::Clock,
+    display::fill_rect,
+    engine::{object::Object, tile::Tile, Event, Sprite},
+    ClockfaceTrait, FBType, I2CType, COLS, ROWS,
 };
-use chrono::{Timelike, Utc};
 
 use super::gfx::{
     assets::{BUSH, CLOUD2, GROUND, HILL, SKY_COLOR},
     block::Block,
-    font::SUPER_MARIO_BROS_24PT,
     mario::Mario,
 };
 
-pub struct Clockface {
+static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4>> =
+    StaticCell::new();
+
+pub(crate) struct Clockface {
     ground: Tile,
     bush: Object,
     cloud1: Object,
@@ -24,14 +32,14 @@ pub struct Clockface {
 
 impl Clockface {
     pub fn new() -> Self {
-        let (tx, rx) = create_event_channel();
+        let channel: &'static mut _ = CHANNEL.init(PubSubChannel::new());
 
         let mut mario = Mario::new(23, 40);
-        mario.subscribe(rx.resubscribe(), tx.clone());
+        mario.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
         let mut hour_block = Block::new(13, 8);
-        hour_block.subscribe(rx.resubscribe(), tx.clone());
+        hour_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
         let mut minute_block = Block::new(32, 8);
-        minute_block.subscribe(rx.resubscribe(), tx.clone());
+        minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
         Self {
             ground: Tile::new(GROUND, 8, 8),
@@ -45,43 +53,48 @@ impl Clockface {
         }
     }
 
+    fn now() -> chrono::DateTime<chrono_tz::Tz> {
+        Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich)
+    }
+
     fn update_time(&mut self) {
-        let date_time =
-            Utc::now().with_timezone(&chrono::FixedOffset::east_opt(3600).expect("Invalid offset"));
-        self.hour_block.set_text(date_time.hour().to_string());
+        let now = Clockface::now();
+
+        self.hour_block
+            .set_text(format!("{:02}", now.hour()).as_str());
         self.minute_block
-            .set_text(format!("{:02}", date_time.minute()));
+            .set_text(format!("{:02}", now.minute()).as_str());
     }
 }
 
 impl ClockfaceTrait for Clockface {
-    fn setup(&mut self, display: &mut Display) {
-        // set global font
-        display.set_font(SUPER_MARIO_BROS_24PT);
-        display.fill_rect(0, 0, GRID_SIZE as i32, GRID_SIZE as i32, SKY_COLOR);
+    fn setup(&mut self, fb: &mut FBType) {
+        fill_rect(fb, 0, 0, ROWS as u32, COLS as u32, SKY_COLOR);
 
         // Initialize scene
-        self.ground
-            .fill_row(GRID_SIZE as i32 - self.ground.height(), display);
-        self.bush.draw(43, 47, display);
-        self.hill.draw(0, 34, display);
-        self.cloud1.draw(0, 21, display);
-        self.cloud2.draw(51, 7, display);
+        self.ground.fill_row(COLS as i32 - self.ground.height(), fb);
+        self.bush.draw(43, 47, fb);
+        self.hill.draw(0, 34, fb);
+        self.cloud1.draw(0, 21, fb);
+        self.cloud2.draw(51, 7, fb);
 
         self.update_time();
 
-        self.hour_block.init(display);
-        self.minute_block.init(display);
-        self.mario.init(display);
+        self.hour_block.init(fb);
+        self.minute_block.init(fb);
+        self.mario.init(fb);
     }
 
-    fn update(&mut self, display: &mut Display) {
-        self.hour_block.update(display);
-        self.minute_block.update(display);
-        self.mario.update(display);
+    async fn update(&mut self, fb: &mut FBType) {
+        self.hour_block.update(fb).await;
+        self.minute_block.update(fb).await;
+        self.mario.update(fb).await;
 
-        if Utc::now().second() == 0 {
-            self.mario.jump(display);
+        let now = Clockface::now();
+
+        //TODO: modulo 60
+        if now.second() % 10 == 0 {
+            self.mario.jump(fb);
             self.update_time();
         }
     }
