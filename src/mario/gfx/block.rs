@@ -1,8 +1,14 @@
-use crate::engine::{
-    display::Display, millis, Direction, Event, EventReceiver, EventSender, Sprite,
+use super::assets::{BLACK, BLOCK, SKY_COLOR};
+use crate::{
+    display::{draw_rgb_bitmap, fill_rect, print_text},
+    engine::{millis, Direction, Event, Sprite},
+    FBType,
 };
-
-use super::assets::{BLOCK, SKY_COLOR};
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    pubsub::{Publisher, Subscriber},
+};
+use heapless::String;
 
 const MOVE_PACE: u8 = 2;
 const MAX_MOVE_HEIGHT: u8 = 4;
@@ -13,21 +19,20 @@ enum State {
     Hit,
 }
 
-#[derive(Debug)]
-pub struct Block {
+pub(crate) struct Block {
     x: i32,
     y: i32,
     width: i32,
     height: i32,
     direction: Direction,
-    text: String,
+    text: String<2>,
     last_millis: u64,
     state: State,
     last_state: State,
     first_y: i32,
     last_y: i32,
-    event_tx: Option<EventSender>,
-    event_rx: Option<EventReceiver>,
+    rx: Option<Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
+    tx: Option<Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
 }
 
 impl Block {
@@ -44,18 +49,26 @@ impl Block {
             last_state: State::Idle,
             first_y: y,
             last_y: y,
-            event_tx: None,
-            event_rx: None,
+            rx: None,
+            tx: None,
         }
     }
 
-    pub fn init(&mut self, display: &mut Display) {
-        display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
-        self.set_text_block(display);
+    pub fn init(&mut self, fb: &mut FBType) {
+        draw_rgb_bitmap(
+            fb,
+            self.x,
+            self.y,
+            BLOCK, // Use the BLOCK asset
+            self.width,
+            self.height,
+        );
+        self.set_text_block(fb);
     }
 
-    pub fn set_text(&mut self, text: String) {
-        self.text = text;
+    pub fn set_text(&mut self, text: &str) {
+        self.text.clear();
+        self.text.push_str(text).unwrap();
     }
 
     fn idle(&mut self) {
@@ -75,30 +88,40 @@ impl Block {
         }
     }
 
-    fn set_text_block(&self, display: &mut Display) {
+    fn set_text_block(&self, fb: &mut FBType) {
         if self.text.len() == 1 {
-            display.print(&self.text, self.x + 6, self.y + 12, 0x0000);
+            print_text(fb, &self.text, self.x + 6, self.y + 12, BLACK);
         } else {
-            display.print(&self.text, self.x + 2, self.y + 12, 0x0000);
+            print_text(fb, &self.text, self.x + 2, self.y + 12, BLACK);
         }
     }
 
-    pub fn update(&mut self, display: &mut Display) {
-        if let Some(rx) = &mut self.event_rx {
-            if let Ok(Event::Move(sprite)) = rx.try_recv() {
+    pub async fn update(&mut self, fb: &mut FBType) {
+        if let Some(rx) = &mut self.rx {
+            if let Some(Event::Move(sprite)) = rx.try_next_message_pure() {
                 if sprite.name != self.name() && self.collided_with(&sprite) {
                     self.hit();
-                    self.publish_event(Event::Collision(self.get_info()));
+                    let info = self.get_info();
+                    if let Some(tx) = &mut self.tx {
+                        tx.publish(Event::Collision(info)).await;
+                    }
                 }
             }
         }
 
         if self.state == State::Idle && self.last_state != self.state {
-            display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
-            self.set_text_block(display);
+            draw_rgb_bitmap(fb, self.x, self.y, BLOCK, self.width, self.height);
+            self.set_text_block(fb);
             self.last_state = self.state;
         } else if self.state == State::Hit && millis() - self.last_millis >= 60 {
-            display.fill_rect(self.x, self.y, self.width, self.height, SKY_COLOR);
+            fill_rect(
+                fb,
+                self.x,
+                self.y,
+                self.width as u32,
+                self.height as u32,
+                SKY_COLOR,
+            );
 
             self.y += MOVE_PACE as i32
                 * if self.direction == Direction::Up {
@@ -107,10 +130,11 @@ impl Block {
                     1
                 };
 
-            display.draw_rgb_bitmap(self.x, self.y, BLOCK, self.width, self.height);
-            self.set_text_block(display);
+            draw_rgb_bitmap(fb, self.x, self.y, BLOCK, self.width, self.height);
 
-            if ((self.first_y - self.y) as f32).floor() as i32 >= MAX_MOVE_HEIGHT as i32 {
+            self.set_text_block(fb);
+
+            if (self.first_y - self.y) >= MAX_MOVE_HEIGHT as i32 {
                 self.direction = Direction::Down;
             }
 
@@ -140,16 +164,16 @@ impl Sprite for Block {
         self.height as u8
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "Block"
     }
 
-    fn subscribe(&mut self, rx: EventReceiver, tx: EventSender) {
-        self.event_rx = Some(rx);
-        self.event_tx = Some(tx);
-    }
-
-    fn get_sender(&self) -> Option<EventSender> {
-        self.event_tx.clone()
+    fn subscribe(
+        &mut self,
+        tx: Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
+        rx: Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
+    ) {
+        self.rx = Some(rx);
+        self.tx = Some(tx);
     }
 }

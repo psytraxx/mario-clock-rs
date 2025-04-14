@@ -1,5 +1,6 @@
 // Define color constants
 pub const SKY_COLOR: u16 = 0x000E;
+pub const BLACK: u16 = 0x0000;
 pub const _MASK: u16 = SKY_COLOR;
 
 pub const M_RED: u16 = 0xF801;

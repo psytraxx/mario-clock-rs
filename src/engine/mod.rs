@@ -1,17 +1,15 @@
-use std::{
-    fmt::Debug,
-    time::{SystemTime, UNIX_EPOCH},
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    pubsub::{Publisher, Subscriber},
 };
-use tokio::sync::broadcast::{self, Receiver, Sender};
+use embassy_time::Instant;
 
-// Module declarations
-pub mod display;
 pub mod object;
 pub mod tile;
 
 // Type definitions and basic structs
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Direction {
+pub(crate) enum Direction {
     Up,
     Down,
     //Left,
@@ -19,8 +17,8 @@ pub enum Direction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpriteInfo {
-    pub name: String,
+pub(crate) struct SpriteInfo {
+    pub name: &'static str,
     pub x: i8,
     pub y: i8,
     pub width: u8,
@@ -28,49 +26,31 @@ pub struct SpriteInfo {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Event {
+pub(crate) enum Event {
     Move(SpriteInfo),
     Collision(SpriteInfo),
 }
 
-// Event system types
-pub type EventSender = Sender<Event>;
-pub type EventReceiver = Receiver<Event>;
-
 // Utility functions
-pub fn millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
-}
-
-pub fn create_event_channel() -> (EventSender, EventReceiver) {
-    broadcast::channel(100)
+pub(crate) fn millis() -> u64 {
+    Instant::now().as_millis()
 }
 
 // Core sprite trait
-pub trait Sprite: Send + Sync {
+pub(crate) trait Sprite: Send + Sync {
     // Required properties
     fn x(&self) -> i8;
     fn y(&self) -> i8;
     fn width(&self) -> u8;
     fn height(&self) -> u8;
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
 
     // Event system methods
-    fn subscribe(&mut self, rx: EventReceiver, tx: EventSender);
-    fn get_sender(&self) -> Option<EventSender>;
-
-    // Default implementations
-    fn publish_event(&self, event: Event) {
-        if let Some(sender) = self.get_sender() {
-            match sender.send(event) {
-                Ok(_) => {}
-                Err(e) => eprintln!("Error sending event: {:?}", e),
-            }
-        }
-    }
+    fn subscribe(
+        &mut self,
+        tx: Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
+        rx: Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
+    );
 
     fn collided_with(&self, sprite: &SpriteInfo) -> bool {
         self.x() < sprite.x + sprite.width as i8
@@ -81,7 +61,7 @@ pub trait Sprite: Send + Sync {
 
     fn get_info(&self) -> SpriteInfo {
         SpriteInfo {
-            name: self.name().to_string(),
+            name: self.name(),
             x: self.x(),
             y: self.y(),
             width: self.width(),
@@ -93,16 +73,15 @@ pub trait Sprite: Send + Sync {
 pub mod font {
     // Font related structs
     #[derive(Debug, Clone)]
-    pub struct GFXfont<'a> {
+    pub(crate) struct GFXfont<'a> {
         pub bitmap: &'a [u8],
         pub glyph: &'a [GFXglyph],
         pub first: u8,
         pub last: u8,
-        pub y_advance: u8,
     }
 
     #[derive(Debug, Clone, Copy)]
-    pub struct GFXglyph {
+    pub(crate) struct GFXglyph {
         pub bitmap_offset: u16,
         pub width: u8,
         pub height: u8,
