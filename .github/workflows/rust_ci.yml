@@ -1,0 +1,41 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  rust-checks:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    env:
+      WIFI_SSID: ssid
+      WIFI_PSK: password
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          buildtargets: esp32s3
+          ldproxy: false
+          version: "1.85.0"
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+      - name: Run build
+        run: cargo build  --release
+      - name: Run fmt
+        run: cargo fmt --all -- --check --color always
+      - name: Run clippy
+        run: cargo clippy --all-features --workspace -- -D warnings
