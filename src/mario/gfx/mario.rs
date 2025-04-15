@@ -1,5 +1,5 @@
 use crate::{
-    display::{draw_rgb_bitmap, fill_rect},
+    display::draw_rgb_bitmap,
     engine::{millis, Direction, Event, Sprite},
     FBType,
 };
@@ -8,200 +8,175 @@ use embassy_sync::{
     pubsub::{Publisher, Subscriber},
 };
 
-use super::assets::{MARIO_IDLE, MARIO_IDLE_SIZE, MARIO_JUMP, MARIO_JUMP_SIZE, SKY_COLOR};
+use super::assets::{MARIO_IDLE, MARIO_IDLE_SIZE, MARIO_JUMP, MARIO_JUMP_SIZE};
 
-const MARIO_PACE: u8 = 3;
-const MARIO_JUMP_HEIGHT: u8 = 14;
+// --- Constants ---
+const MARIO_PACE: i32 = 3; // Pixels Mario moves per animation frame during jump
+const MARIO_JUMP_HEIGHT: i32 = 14; // Maximum height Mario jumps in pixels
+const JUMP_ANIMATION_INTERVAL_MS: u64 = 50; // Milliseconds between jump animation frames
+const JUMP_DEBOUNCE_MS: u64 = 500; // Minimum time between jumps
+const GROUND_Y: i32 = 56; // Y-coordinate considered as the ground level
 
+// --- State ---
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum State {
     Idle,
-    //Walking,
     Jumping,
 }
 
+// --- Mario Struct ---
 pub(crate) struct Mario {
+    // Position and Dimensions
     x: i32,
     y: i32,
     width: i32,
     height: i32,
-    direction: Direction,
-    last_x: i32,
-    last_y: i32,
-    sprite: &'static [u16],
-    last_millis: u64,
+
+    // State and Animation
     state: State,
-    last_state: State,
+    direction: Direction,       // Used for jump direction (Up/Down)
+    sprite: &'static [u16],     // Current sprite bitmap
+    last_animation_millis: u64, // Timestamp of the last animation update
+    jump_start_y: i32,          // Y position when the jump started
+
+    // Event Handling (Pub/Sub)
     rx: Option<Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
     tx: Option<Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
 }
 
 impl Mario {
+    /// Creates a new Mario instance at the given coordinates.
     pub fn new(x: i32, y: i32) -> Self {
         Mario {
             x,
             y,
             width: MARIO_IDLE_SIZE[0] as i32,
             height: MARIO_IDLE_SIZE[1] as i32,
-            direction: Direction::Up,
-            last_x: x,
-            last_y: y,
-            sprite: MARIO_IDLE,
-            last_millis: 0,
             state: State::Idle,
-            last_state: State::Idle,
+            direction: Direction::Up, // Default, relevant only during jump
+            sprite: MARIO_IDLE,
+            last_animation_millis: 0,
+            jump_start_y: y, // Initialize jump_start_y
             rx: None,
             tx: None,
         }
     }
 
-    fn idle(&mut self, fb: &mut FBType) {
+    /// Sets Mario's state to Idle and updates sprite properties.
+    fn set_idle_state(&mut self) {
         if self.state != State::Idle {
-            self.last_state = self.state;
             self.state = State::Idle;
-
-            fill_rect(
-                fb,
-                self.x,
-                self.y,
-                self.width as u32,
-                self.height as u32,
-                SKY_COLOR,
-            );
-
             self.width = MARIO_IDLE_SIZE[0] as i32;
             self.height = MARIO_IDLE_SIZE[1] as i32;
             self.sprite = MARIO_IDLE;
+            // Ensure Mario is exactly on the ground when idle
+            self.y = GROUND_Y - self.height;
         }
     }
 
-    pub async fn update(&mut self, fb: &mut FBType, jump: bool) {
+    /// Initiates the jump sequence.
+    fn start_jump(&mut self) {
+        if self.state == State::Idle && (millis() - self.last_animation_millis > JUMP_DEBOUNCE_MS) {
+            self.state = State::Jumping;
+            self.width = MARIO_JUMP_SIZE[0] as i32;
+            self.height = MARIO_JUMP_SIZE[1] as i32;
+            self.sprite = MARIO_JUMP;
+            self.direction = Direction::Up; // Start jumping upwards
+            self.jump_start_y = self.y; // Record starting Y for height check
+            self.last_animation_millis = millis(); // Reset timer for debounce and animation
+        }
+    }
+
+    /// Updates Mario's state, position, and draws him on the framebuffer.
+    /// `trigger_jump` indicates if a jump should be initiated this frame.
+    pub async fn update(&mut self, fb: &mut FBType, trigger_jump: bool) {
+        let current_millis = millis();
+        let next_x = self.x;
+        let mut next_y = self.y;
+        let mut position_changed = false; // Track if position changes this frame
+
+        // --- 1. Handle Incoming Events ---
         if let Some(rx) = &mut self.rx {
-            // Use try_next_message_pure for non-blocking check on Subscriber
             if let Some(event) = rx.try_next_message_pure() {
-                // Corrected method call
                 match event {
-                    Event::Collision(t) if t.name != self.name() => {
-                        // If jumping and collided, change direction to Down
-                        if self.state == State::Jumping {
-                            self.direction = Direction::Down;
-                        }
+                    Event::Collision(t)
+                        if t.name != self.name()
+                            && self.state == State::Jumping
+                            && self.direction == Direction::Up =>
+                    {
+                        self.direction = Direction::Down;
                     }
-                    _ => {} // Ignore other events
+                    _ => {}
                 }
             }
         }
 
-        // Trigger jump state if not already jumping and debounce time passed
-        if jump && self.state != State::Jumping && (millis() - self.last_millis > 500) {
-            self.last_state = self.state;
-            self.state = State::Jumping;
-
-            // Clear previous sprite area (important for state change)
-            // Use last known width/height before changing state
-            fill_rect(
-                fb,
-                self.x,
-                self.y,
-                MARIO_IDLE_SIZE[0] as u32, // Use IDLE size for clearing
-                MARIO_IDLE_SIZE[1] as u32,
-                SKY_COLOR,
-            );
-
-            // Update sprite properties for jumping
-            self.width = MARIO_JUMP_SIZE[0] as i32;
-            self.height = MARIO_JUMP_SIZE[1] as i32;
-            self.sprite = MARIO_JUMP;
-            self.direction = Direction::Up;
-            self.last_y = self.y;
-            self.last_x = self.x;
+        // --- 2. Handle Jump Initiation ---
+        if trigger_jump {
+            self.start_jump();
+            // If jump started, dimensions might change, force redraw logic later
         }
 
-        // --- State Machine & Drawing Logic ---
-        if self.state == State::Idle {
-            // Always draw in Idle state for full redraw loop
-            draw_rgb_bitmap(
-                fb,
-                self.x,
-                self.y,
-                MARIO_IDLE,
-                MARIO_IDLE_SIZE[0] as i32,
-                MARIO_IDLE_SIZE[1] as i32,
-            );
-            // self.last_state = self.state; // Redundant if always drawing
-        } else if self.state == State::Jumping {
-            if millis() - self.last_millis >= 50 {
-                // Animation timing
-                // Clear previous frame's position
-                fill_rect(
-                    fb,
-                    self.x,
-                    self.y,
-                    self.width as u32,
-                    self.height as u32,
-                    SKY_COLOR,
-                );
+        // --- 3. Update State and Position ---
+        match self.state {
+            State::Idle => {
+                // No position change in Idle state
+            }
+            State::Jumping => {
+                if current_millis - self.last_animation_millis >= JUMP_ANIMATION_INTERVAL_MS {
+                    let y_change = MARIO_PACE
+                        * if self.direction == Direction::Up {
+                            -1
+                        } else {
+                            1
+                        };
+                    next_y += y_change;
+                    position_changed = y_change != 0; // Position changed if y_change is non-zero
 
-                // Update position based on direction
-                self.y += MARIO_PACE as i32
-                    * if self.direction == Direction::Up {
-                        -1
-                    } else {
-                        1
-                    };
+                    if self.direction == Direction::Up
+                        && (self.jump_start_y - next_y) >= MARIO_JUMP_HEIGHT
+                    {
+                        self.direction = Direction::Down;
+                    }
 
-                // Draw Mario at the new position
-                draw_rgb_bitmap(fb, self.x, self.y, self.sprite, self.width, self.height);
+                    if self.direction == Direction::Down && (next_y + self.height) >= GROUND_Y {
+                        self.set_idle_state();
+                        next_y = self.y; // Use the Y set by set_idle_state
+                                         // Position effectively changed back to ground level
+                        position_changed = true;
+                    }
 
-                // Publish Move event
-                let info = self.get_info();
-                if let Some(tx) = &mut self.tx {
-                    // Use non-blocking publish
-                    tx.publish_immediate(Event::Move(info));
+                    self.last_animation_millis = current_millis;
+                } else {
+                    // Not enough time passed for animation, keep current position
+                    next_y = self.y;
+                    // position_changed remains false if no movement calculation happened
                 }
+            }
+        }
 
-                // Check jump height limit
-                if (self.last_y - self.y) >= MARIO_JUMP_HEIGHT as i32
-                    && self.direction == Direction::Up
-                {
-                    self.direction = Direction::Down;
-                }
+        // --- 4. Update Position ---
+        // Update Mario's actual position only if it changed
+        if position_changed {
+            self.x = next_x; // Although x doesn't change in this logic, keep for consistency
+            self.y = next_y;
+        }
 
-                // Check if landed (adjust landing condition if ground level changes)
-                // Assuming ground is around y=56 - height
-                if self.y + self.height >= 56 && self.direction == Direction::Down {
-                    // Landed, transition back to Idle
-                    self.y = 56 - MARIO_IDLE_SIZE[1] as i32; // Set precise idle Y
-                    self.idle(fb); // Call idle to reset state and sprite properties
+        // --- 5. Draw Current Frame ---
+        // Always draw Mario at his current position
+        draw_rgb_bitmap(fb, self.x, self.y, self.sprite, self.width, self.height);
 
-                    // Draw immediately in Idle state after landing
-                    fill_rect(
-                        fb,
-                        self.x,
-                        self.y + MARIO_PACE as i32,
-                        self.width as u32,
-                        self.height as u32,
-                        SKY_COLOR,
-                    ); // Clear last jump pos
-                    draw_rgb_bitmap(
-                        fb,
-                        self.x,
-                        self.y,
-                        MARIO_IDLE,
-                        MARIO_IDLE_SIZE[0] as i32,
-                        MARIO_IDLE_SIZE[1] as i32,
-                    );
-                }
-
-                self.last_millis = millis();
-            } else {
-                // If not enough time passed for animation step, draw at current position
-                draw_rgb_bitmap(fb, self.x, self.y, self.sprite, self.width, self.height);
+        // --- 6. Publish Move Event if Position Changed ---
+        if position_changed {
+            let info = self.get_info();
+            if let Some(tx) = &mut self.tx {
+                tx.publish_immediate(Event::Move(info));
             }
         }
     }
 }
 
+// --- Sprite Trait Implementation ---
 impl Sprite for Mario {
     fn x(&self) -> i8 {
         self.x as i8
@@ -223,6 +198,7 @@ impl Sprite for Mario {
         "MARIO"
     }
 
+    /// Subscribes Mario to the event channel.
     fn subscribe(
         &mut self,
         tx: Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
@@ -231,4 +207,6 @@ impl Sprite for Mario {
         self.rx = Some(rx);
         self.tx = Some(tx);
     }
+
+    // get_info uses the default trait implementation
 }
