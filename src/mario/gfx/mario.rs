@@ -1,12 +1,9 @@
 use crate::{
-    clock::Clock, // Added Clock
     display::{draw_rgb_bitmap, fill_rect},
     engine::{millis, Direction, Event, Sprite, Updatable}, // Added Updatable
     FBType,
-    I2CType, // Added I2CType for Clock
 };
 use alloc::boxed::Box; // Added Box
-use chrono::Timelike;
 use core::future::Future; // Added Future
 use core::pin::Pin; // Added Pin
 use embassy_sync::{
@@ -105,39 +102,6 @@ impl<'fb> Updatable<'fb> for Mario {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'fb>> {
         // Wrap the async block with Box::pin()
         Box::pin(async move {
-            // --- Jump Trigger Logic (moved from clockface.rs) ---
-            // Get current time - requires access to Clock or passing time via event
-            // Let's assume Clock is accessible statically here for simplicity
-            // NOTE: This might need adjustment depending on how Clock is truly accessed globally
-            let now = Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich);
-            if now.second() % 10 == 0 {
-                // Trigger jump state if not already jumping
-                if self.state != State::Jumping && (millis() - self.last_millis > 500) {
-                    // Reuse existing debounce logic
-                    self.last_state = self.state;
-                    self.state = State::Jumping;
-
-                    // Clear previous sprite area (important for state change)
-                    // Use last known width/height before changing state
-                    fill_rect(
-                        fb,
-                        self.x,
-                        self.y,
-                        MARIO_IDLE_SIZE[0] as u32, // Use IDLE size for clearing
-                        MARIO_IDLE_SIZE[1] as u32,
-                        SKY_COLOR,
-                    );
-
-                    // Update sprite properties for jumping
-                    self.width = MARIO_JUMP_SIZE[0] as i32;
-                    self.height = MARIO_JUMP_SIZE[1] as i32;
-                    self.sprite = MARIO_JUMP;
-                    self.direction = Direction::Up;
-                    self.last_y = self.y;
-                    self.last_x = self.x;
-                }
-            }
-
             // --- Event Handling ---
             if let Some(rx) = &mut self.rx {
                 // Use try_next_message_pure for non-blocking check on Subscriber
@@ -150,7 +114,33 @@ impl<'fb> Updatable<'fb> for Mario {
                                 self.direction = Direction::Down;
                             }
                         }
-                        _ => {} // Ignore other events
+                        Event::JumpTrigger => {
+                            // Trigger jump state if not already jumping and debounce time passed
+                            if self.state != State::Jumping && (millis() - self.last_millis > 500) {
+                                self.last_state = self.state;
+                                self.state = State::Jumping;
+
+                                // Clear previous sprite area (important for state change)
+                                // Use last known width/height before changing state
+                                fill_rect(
+                                    fb,
+                                    self.x,
+                                    self.y,
+                                    MARIO_IDLE_SIZE[0] as u32, // Use IDLE size for clearing
+                                    MARIO_IDLE_SIZE[1] as u32,
+                                    SKY_COLOR,
+                                );
+
+                                // Update sprite properties for jumping
+                                self.width = MARIO_JUMP_SIZE[0] as i32;
+                                self.height = MARIO_JUMP_SIZE[1] as i32;
+                                self.sprite = MARIO_JUMP;
+                                self.direction = Direction::Up;
+                                self.last_y = self.y;
+                                self.last_x = self.x;
+                            }
+                        }
+                        _ => {} // Ignore other events like TimeUpdate for Mario
                     }
                 }
             }

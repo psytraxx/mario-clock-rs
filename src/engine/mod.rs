@@ -34,6 +34,7 @@ pub(crate) enum Event {
     Move(SpriteInfo),
     Collision(SpriteInfo),
     TimeUpdate { hour: u8, minute: u8 }, // Added time update event
+    JumpTrigger,                         // Added jump trigger event
 }
 
 // Trait for elements that can be updated and drawn in the main loop

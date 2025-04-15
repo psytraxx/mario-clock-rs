@@ -92,6 +92,12 @@ impl ClockfaceTrait for Clockface {
 
         self.publish_time_event();
 
+        // Check if it's time to trigger a jump
+        let now = Self::now();
+        if now.second() % 10 == 0 {
+            self.publisher.publish_immediate(Event::JumpTrigger);
+        }
+
         for element in self.updatables.iter_mut() {
             element.update(fb).await;
         }
