@@ -1,4 +1,3 @@
-use alloc::format;
 use chrono::Timelike;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use static_cell::StaticCell;
@@ -36,8 +35,10 @@ impl Clockface {
 
         let mut mario = Mario::new(23, 40);
         mario.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
+
         let mut hour_block = Block::new(13, 8);
         hour_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
+
         let mut minute_block = Block::new(32, 8);
         minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
@@ -53,49 +54,29 @@ impl Clockface {
         }
     }
 
-    fn now() -> chrono::DateTime<chrono_tz::Tz> {
+    pub fn now() -> chrono::DateTime<chrono_tz::Tz> {
         Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich)
-    }
-
-    fn update_time(&mut self) {
-        let now = Clockface::now();
-
-        self.hour_block
-            .set_text(format!("{:02}", now.hour()).as_str());
-        self.minute_block
-            .set_text(format!("{:02}", now.minute()).as_str());
     }
 }
 
 impl ClockfaceTrait for Clockface {
-    fn setup(&mut self, fb: &mut FBType) {
+    async fn update(&mut self, fb: &mut FBType) {
         fill_rect(fb, 0, 0, ROWS as u32, COLS as u32, SKY_COLOR);
 
-        // Initialize scene
         self.ground.fill_row(COLS as i32 - self.ground.height(), fb);
         self.bush.draw(43, 47, fb);
         self.hill.draw(0, 34, fb);
         self.cloud1.draw(0, 21, fb);
         self.cloud2.draw(51, 7, fb);
 
-        self.update_time();
+        let now = Self::now();
 
-        self.hour_block.init(fb);
-        self.minute_block.init(fb);
-        self.mario.init(fb);
-    }
+        // Check if it's time to trigger a jump - we jump every minute
+        let jump = now.second() % 60 == 0;
 
-    async fn update(&mut self, fb: &mut FBType) {
-        self.hour_block.update(fb).await;
-        self.minute_block.update(fb).await;
-        self.mario.update(fb).await;
-
-        let now = Clockface::now();
-
-        //TODO: modulo 60
-        if now.second() % 10 == 0 {
-            self.mario.jump(fb);
-            self.update_time();
-        }
+        // Update the hour and minute blocks
+        self.mario.update(fb, jump).await;
+        self.hour_block.update(fb, now.hour()).await;
+        self.minute_block.update(fb, now.minute()).await;
     }
 }
