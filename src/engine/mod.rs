@@ -1,8 +1,12 @@
+use crate::FBType;
+use alloc::boxed::Box; // Need Box for Pin<Box<dyn Future>>
+use core::future::Future;
+use core::pin::Pin; // Need Pin for Pin<Box<dyn Future>>
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
-use embassy_time::Instant;
+use embassy_time::Instant; // Assuming FBType is defined in crate root or display module
 
 pub mod object;
 pub mod tile;
@@ -29,6 +33,15 @@ pub(crate) struct SpriteInfo {
 pub(crate) enum Event {
     Move(SpriteInfo),
     Collision(SpriteInfo),
+    TimeUpdate { hour: u8, minute: u8 }, // Added time update event
+}
+
+// Trait for elements that can be updated and drawn in the main loop
+// Returns Pin<Box<dyn Future>> to be object-safe
+pub trait Updatable<'fb>: Send + Sync {
+    // Changed return type
+    fn update(&'fb mut self, fb: &'fb mut FBType)
+        -> Pin<Box<dyn Future<Output = ()> + Send + 'fb>>;
 }
 
 // Utility functions

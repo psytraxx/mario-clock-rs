@@ -19,8 +19,7 @@ pub(crate) async fn display_task(
 
     // Initialize clockface
     let mut cf = Clockface::new();
-    // Initial setup
-    cf.setup(fb);
+    // Initial setup removed, drawing is now handled entirely within update loop
 
     loop {
         // Update clock logic

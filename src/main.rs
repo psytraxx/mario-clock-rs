@@ -59,8 +59,8 @@ macro_rules! mk_static {
 static REFRESH_RATE: AtomicU32 = AtomicU32::new(0);
 
 pub(crate) trait ClockfaceTrait {
+    // Removed setup method requirement
     fn update(&mut self, fb: &mut FBType) -> impl Future<Output = ()> + Send;
-    fn setup(&mut self, fb: &mut FBType);
 }
 
 #[main]
