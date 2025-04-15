@@ -60,7 +60,6 @@ static REFRESH_RATE: AtomicU32 = AtomicU32::new(0);
 
 pub(crate) trait ClockfaceTrait {
     fn update(&mut self, fb: &mut FBType) -> impl Future<Output = ()> + Send;
-    fn setup(&mut self, fb: &mut FBType);
 }
 
 #[main]
@@ -76,6 +75,9 @@ async fn main(spawner: Spawner) {
         .with_sda(peripherals.GPIO41);
 
     heap_allocator!(size: 72 * 1024);
+
+    let mut clock_buffs = ClockBuffs::default();
+    let mut clock = Clock::<I2CType>::new(i2c);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
@@ -161,8 +163,6 @@ async fn main(spawner: Spawner) {
     } else {
         println!("Failed to get stack config");
     }
-    let mut clock_buffs = ClockBuffs::default();
-    let mut clock = Clock::<I2CType>::new(i2c);
     clock
         .sync_ntp(stack, &mut clock_buffs)
         .await

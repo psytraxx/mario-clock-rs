@@ -1,7 +1,7 @@
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use core::net::SocketAddr::V4;
 use core::net::SocketAddrV4;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{dns, IpAddress, Ipv4Address, Stack};
 use embassy_time::Instant;
@@ -10,7 +10,7 @@ use esp_println::println;
 use pcf8563::PCF8563;
 use sntpc::{sntp_process_response, sntp_send_request, NtpContext, NtpTimestampGenerator};
 
-static TIME_OFFSET_US: AtomicUsize = AtomicUsize::new(0);
+static TIME_OFFSET_SECONDS: AtomicU32 = AtomicU32::new(0);
 
 pub struct ClockBuffs {
     rx_meta: [PacketMetadata; 16],
@@ -43,12 +43,11 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         let mut rtc = PCF8563::new(i2c.into());
         let datetime = rtc.get_datetime().ok();
 
+        println!("RTC time: {:?}", datetime);
+
         if let Some(time) = datetime {
             let timestamp = Self::rtc_datetime_to_timestamp(time);
-            TIME_OFFSET_US.store(
-                timestamp.try_into().expect("Unable to convert to usize"),
-                Ordering::Relaxed,
-            );
+            TIME_OFFSET_SECONDS.store(timestamp, Ordering::Relaxed);
         } else {
             println!("Failed to read RTC time - you should call sync_ntp() - otherwise we are unable to determine the time");
         };
@@ -74,12 +73,8 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
 
         self.socket = Some(socket);
 
-        let offset_microseconds = TIME_OFFSET_US.load(Ordering::Relaxed);
-        let context = NtpContext::new(TimeStampGen::new(
-            offset_microseconds
-                .try_into()
-                .expect("Unable to convert to usize"),
-        ));
+        let offset_seconds = TIME_OFFSET_SECONDS.load(Ordering::Relaxed);
+        let context = NtpContext::new(TimeStampGen::new(offset_seconds as i64 * 1_000_000));
 
         println!("getting time from {}", addr);
         let addr = V4(SocketAddrV4::new(addr, 123));
@@ -93,13 +88,7 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             .expect("Failed to process NTP response");
 
         println!("received NTP response: {:?}", response);
-        TIME_OFFSET_US.fetch_add(
-            response
-                .offset
-                .try_into()
-                .expect("Unable to convert to usize"),
-            Ordering::Relaxed,
-        );
+        TIME_OFFSET_SECONDS.store(response.seconds, Ordering::Relaxed);
 
         self.set_rtc();
 
@@ -107,18 +96,21 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
     }
 
     pub fn get_time() -> DateTime<Utc> {
-        let instant_us: usize = Instant::now().as_micros().try_into().unwrap();
-        let offset_us = TIME_OFFSET_US.load(Ordering::Relaxed);
-        let time_us = instant_us + offset_us;
-        DateTime::from_timestamp_micros(time_us.try_into().expect("Unable to convert to i64"))
-            .unwrap()
+        let instant_seconds = Instant::now().as_secs();
+        let offset_seconds: u64 = TIME_OFFSET_SECONDS.load(Ordering::Relaxed) as u64;
+        let time_seconds = instant_seconds + offset_seconds;
+        DateTime::from_timestamp(
+            time_seconds.try_into().expect("Unable to convert to i64"),
+            0,
+        )
+        .unwrap()
     }
 
     pub fn get_time_in_zone(zone: chrono_tz::Tz) -> DateTime<chrono_tz::Tz> {
         Self::get_time().with_timezone(&zone)
     }
 
-    fn rtc_datetime_to_timestamp(datetime: pcf8563::DateTime) -> i64 {
+    fn rtc_datetime_to_timestamp(datetime: pcf8563::DateTime) -> u32 {
         let year = datetime.year as i32 + 2000; // pcf8563 year is since 2000
         let month = datetime.month as u32;
         let day = datetime.day as u32;
@@ -133,16 +125,13 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
 
         // Convert to DateTime<Utc>
         let datetime_utc: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, chrono::Utc);
-        // Get the Unix timestamp (microseconds since epoch)
-        datetime_utc.timestamp_micros()
+        // Get the Unix timestamp (seconds since epoch)
+        datetime_utc.timestamp() as u32
     }
 
     fn set_rtc(&mut self) {
-        let time_us = TIME_OFFSET_US.load(Ordering::Relaxed);
-        let t = DateTime::<Utc>::from_timestamp_micros(
-            time_us.try_into().expect("Unable to convert to usize"),
-        )
-        .unwrap();
+        let time_seconds = TIME_OFFSET_SECONDS.load(Ordering::Relaxed);
+        let t = DateTime::<Utc>::from_timestamp(time_seconds as i64, 0).unwrap();
         // Set RTC time
         if let Err(e) = self.rtc.set_datetime(&pcf8563::DateTime {
             hours: t.hour() as u8,

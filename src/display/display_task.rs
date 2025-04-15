@@ -19,8 +19,6 @@ pub(crate) async fn display_task(
 
     // Initialize clockface
     let mut cf = Clockface::new();
-    // Initial setup
-    cf.setup(fb);
 
     loop {
         // Update clock logic
