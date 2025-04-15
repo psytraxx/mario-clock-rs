@@ -1,6 +1,6 @@
 use crate::{
     display::{draw_rgb_bitmap, fill_rect},
-    engine::{millis, Direction, Event, Sprite}, // Removed Updatable
+    engine::{millis, Direction, Event, Sprite},
     FBType,
 };
 use embassy_sync::{
@@ -55,18 +55,6 @@ impl Mario {
         }
     }
 
-    // Removed init function
-
-    /* pub fn move_sprite(&mut self, dir: Direction) {
-           match dir {
-               Direction::Right => self.x += MARIO_PACE as i32,
-               Direction::Left => self.x -= MARIO_PACE as i32,
-               _ => {}
-           }
-       }
-    */
-    // Removed jump function (logic moved to update)
-
     fn idle(&mut self, fb: &mut FBType) {
         if self.state != State::Idle {
             self.last_state = self.state;
@@ -87,8 +75,7 @@ impl Mario {
         }
     }
 
-    pub async fn update<'fb>(&'fb mut self, fb: &'fb mut FBType) {
-        // --- Event Handling ---
+    pub async fn update(&mut self, fb: &mut FBType) {
         if let Some(rx) = &mut self.rx {
             // Use try_next_message_pure for non-blocking check on Subscriber
             if let Some(event) = rx.try_next_message_pure() {

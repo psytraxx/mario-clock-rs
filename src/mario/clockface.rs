@@ -8,12 +8,8 @@ use static_cell::StaticCell;
 use crate::{
     clock::Clock,
     display::fill_rect,
-    engine::{object::Object, tile::Tile, Event, Sprite}, // Removed Updatable
-    ClockfaceTrait,
-    FBType,
-    I2CType,
-    COLS,
-    ROWS,
+    engine::{object::Object, tile::Tile, Event, Sprite},
+    ClockfaceTrait, FBType, I2CType, COLS, ROWS,
 };
 
 use super::gfx::{

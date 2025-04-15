@@ -1,7 +1,7 @@
 use super::assets::{BLACK, BLOCK, SKY_COLOR};
 use crate::{
     display::{draw_rgb_bitmap, fill_rect, print_text},
-    engine::{millis, Direction, Event, Sprite}, // Removed Updatable
+    engine::{millis, Direction, Event, Sprite},
     FBType,
 };
 use alloc::format;
@@ -56,8 +56,6 @@ impl Block {
         }
     }
 
-    // Removed init function
-
     // set_text remains the same
     pub fn set_text(&mut self, text: &str) {
         self.text.clear();
@@ -90,26 +88,19 @@ impl Block {
     }
 
     // Change return type to Pin<Box<dyn Future>>
-    pub async fn update<'fb>(&'fb mut self, fb: &'fb mut FBType, text: u32) {
-        // Check for events first
+    pub async fn update(&mut self, fb: &mut FBType, text: u32) {
         if let Some(rx) = &mut self.rx {
-            // Use try_next_message_pure for non-blocking check on Subscriber
-            if let Some(event) = rx.try_next_message_pure() {
-                if let Event::Move(sprite) = event {
-                    // Handle collision check from Move event
-                    if sprite.name != self.name() && self.collided_with(&sprite) {
-                        self.hit(); // Trigger hit state
-                        let info = self.get_info();
-                        if let Some(tx) = &mut self.tx {
-                            // Use non-blocking publish if possible, or handle potential block
-                            tx.publish_immediate(Event::Collision(info));
-                        }
+            if let Some(Event::Move(sprite)) = rx.try_next_message_pure() {
+                if sprite.name != self.name() && self.collided_with(&sprite) {
+                    self.hit();
+                    let info = self.get_info();
+                    if let Some(tx) = &mut self.tx {
+                        tx.publish(Event::Collision(info)).await;
                     }
                 }
             }
         }
 
-        // Update text based on block ID
         let formatted_text = format!("{:02}", text);
 
         self.set_text(formatted_text.as_str());
