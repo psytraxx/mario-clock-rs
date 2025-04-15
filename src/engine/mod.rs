@@ -29,7 +29,6 @@ pub(crate) struct SpriteInfo {
 pub(crate) enum Event {
     Move(SpriteInfo),
     Collision(SpriteInfo),
-    JumpTrigger,
 }
 
 // Utility functions

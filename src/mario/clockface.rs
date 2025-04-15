@@ -1,8 +1,5 @@
 use chrono::Timelike;
-use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
-    pubsub::{PubSubChannel, Publisher},
-};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use static_cell::StaticCell;
 
 use crate::{
@@ -30,7 +27,6 @@ pub(crate) struct Clockface {
     mario: Mario,
     hour_block: Block,
     minute_block: Block,
-    publisher: Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
 }
 
 impl Clockface {
@@ -55,7 +51,6 @@ impl Clockface {
             mario,
             hour_block,
             minute_block,
-            publisher: channel.publisher().unwrap(),
         }
     }
 
@@ -77,11 +72,10 @@ impl ClockfaceTrait for Clockface {
         let now = Self::now();
         // Check if it's time to trigger a jump
 
-        if now.second() % 10 == 0 {
-            self.publisher.publish_immediate(Event::JumpTrigger);
-        }
+        let jump = now.second() % 10 == 0;
+
         // Update the hour and minute blocks
-        self.mario.update(fb).await;
+        self.mario.update(fb, jump).await;
         self.hour_block.update(fb, now.hour()).await;
         self.minute_block.update(fb, now.minute()).await;
     }
