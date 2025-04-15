@@ -44,10 +44,10 @@ impl Clockface {
         let mut mario = Mario::new(23, 40);
         mario.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
-        let mut hour_block = Block::new(13, 8, "hour");
+        let mut hour_block = Block::new(13, 8);
         hour_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
-        let mut minute_block = Block::new(32, 8, "minute");
+        let mut minute_block = Block::new(32, 8);
         minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
         Self {
@@ -66,15 +66,6 @@ impl Clockface {
     pub fn now() -> chrono::DateTime<chrono_tz::Tz> {
         Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich)
     }
-
-    fn publish_time_event(&self) {
-        let now = Self::now();
-        let event = Event::TimeUpdate {
-            hour: now.hour() as u8,
-            minute: now.minute() as u8,
-        };
-        self.publisher.publish_immediate(event);
-    }
 }
 
 impl ClockfaceTrait for Clockface {
@@ -87,16 +78,15 @@ impl ClockfaceTrait for Clockface {
         self.cloud1.draw(0, 21, fb);
         self.cloud2.draw(51, 7, fb);
 
-        self.publish_time_event();
-
-        // Check if it's time to trigger a jump
         let now = Self::now();
+        // Check if it's time to trigger a jump
+
         if now.second() % 10 == 0 {
             self.publisher.publish_immediate(Event::JumpTrigger);
         }
         // Update the hour and minute blocks
         self.mario.update(fb).await;
-        self.hour_block.update(fb).await;
-        self.minute_block.update(fb).await;
+        self.hour_block.update(fb, now.hour()).await;
+        self.minute_block.update(fb, now.minute()).await;
     }
 }

@@ -34,12 +34,11 @@ pub(crate) struct Block {
     last_y: i32,
     rx: Option<Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
     tx: Option<Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
-    id: &'static str, // Added ID to distinguish hour/minute blocks
 }
 
 impl Block {
     // Modified new to accept id
-    pub fn new(x: i32, y: i32, id: &'static str) -> Self {
+    pub fn new(x: i32, y: i32) -> Self {
         Block {
             x,
             y,
@@ -54,7 +53,6 @@ impl Block {
             last_y: y,
             rx: None,
             tx: None,
-            id, // Store id
         }
     }
 
@@ -92,38 +90,29 @@ impl Block {
     }
 
     // Change return type to Pin<Box<dyn Future>>
-    pub async fn update<'fb>(&'fb mut self, fb: &'fb mut FBType) {
+    pub async fn update<'fb>(&'fb mut self, fb: &'fb mut FBType, text: u32) {
         // Check for events first
         if let Some(rx) = &mut self.rx {
             // Use try_next_message_pure for non-blocking check on Subscriber
             if let Some(event) = rx.try_next_message_pure() {
-                // Corrected method call
-                match event {
-                    Event::TimeUpdate { hour, minute } => {
-                        // Update text based on block ID
-                        let formatted_text = if self.id == "hour" {
-                            format!("{:02}", hour)
-                        } else {
-                            // Assuming "minute"
-                            format!("{:02}", minute)
-                        };
-                        self.set_text(&formatted_text);
-                    }
-                    Event::Move(sprite) => {
-                        // Handle collision check from Move event
-                        if sprite.name != self.name() && self.collided_with(&sprite) {
-                            self.hit(); // Trigger hit state
-                            let info = self.get_info();
-                            if let Some(tx) = &mut self.tx {
-                                // Use non-blocking publish if possible, or handle potential block
-                                tx.publish_immediate(Event::Collision(info));
-                            }
+                if let Event::Move(sprite) = event {
+                    // Handle collision check from Move event
+                    if sprite.name != self.name() && self.collided_with(&sprite) {
+                        self.hit(); // Trigger hit state
+                        let info = self.get_info();
+                        if let Some(tx) = &mut self.tx {
+                            // Use non-blocking publish if possible, or handle potential block
+                            tx.publish_immediate(Event::Collision(info));
                         }
                     }
-                    _ => {} // Ignore other events like Collision received by the block itself
                 }
             }
         }
+
+        // Update text based on block ID
+        let formatted_text = format!("{:02}", text);
+
+        self.set_text(formatted_text.as_str());
 
         // Drawing and state logic (previously in update)
         if self.state == State::Idle {

@@ -29,7 +29,6 @@ pub(crate) struct SpriteInfo {
 pub(crate) enum Event {
     Move(SpriteInfo),
     Collision(SpriteInfo),
-    TimeUpdate { hour: u8, minute: u8 },
     JumpTrigger,
 }
 
