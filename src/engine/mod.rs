@@ -2,7 +2,7 @@ use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
-use embassy_time::Instant; // Assuming FBType is defined in crate root or display module
+use embassy_time::Instant;
 
 pub mod object;
 pub mod tile;
