@@ -70,9 +70,9 @@ impl ClockfaceTrait for Clockface {
         self.cloud2.draw(51, 7, fb);
 
         let now = Self::now();
-        // Check if it's time to trigger a jump
 
-        let jump = now.second() % 10 == 0;
+        // Check if it's time to trigger a jump - we jump every minute
+        let jump = now.second() % 60 == 0;
 
         // Update the hour and minute blocks
         self.mario.update(fb, jump).await;
