@@ -77,6 +77,9 @@ async fn main(spawner: Spawner) {
 
     heap_allocator!(size: 72 * 1024);
 
+    let mut clock_buffs = ClockBuffs::default();
+    let mut clock = Clock::<I2CType>::new(i2c);
+
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
 
@@ -161,8 +164,6 @@ async fn main(spawner: Spawner) {
     } else {
         println!("Failed to get stack config");
     }
-    let mut clock_buffs = ClockBuffs::default();
-    let mut clock = Clock::<I2CType>::new(i2c);
     clock
         .sync_ntp(stack, &mut clock_buffs)
         .await
