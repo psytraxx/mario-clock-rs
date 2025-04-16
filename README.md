@@ -6,10 +6,10 @@ This project uses the Embassy async runtime, ESP-HAL, and Embedded Graphics to d
 
 The display driving is handled by the excellent [esp-hub75](https://github.com/liebman/esp-hub75) Rust driver, which provides super-fast DMA transfers for smooth and efficient display updates with minimal CPU overhead.
 
-![Mario Clock Running]([images/mario-clock-running.jpg](https://github.com/user-attachments/assets/5a2ddfff-d172-4671-9fa4-7bc39f33dda5))
+![Mario Clock Running](https://github.com/user-attachments/assets/5a2ddfff-d172-4671-9fa4-7bc39f33dda5)
 _Mario Clock in action_
 
-![Mario Clock Hardware]([images/mario-clock-hardware.jpg](https://github.com/user-attachments/assets/f0c51038-a5ed-495c-8ac6-137c14384760))
+![Mario Clock Hardware](https://github.com/user-attachments/assets/f0c51038-a5ed-495c-8ac6-137c14384760)
 _Hardware setup with ESP32-S3 and HUB75 matrix_
 
 ## Features
