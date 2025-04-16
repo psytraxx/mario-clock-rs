@@ -23,6 +23,15 @@ _Hardware setup with ESP32-S3 and HUB75 matrix_
 - Modern Rust async/await programming model
 - Efficient framebuffer updates through Embassy channels
 
+## TODO
+
+- [x] Convert Arduino code to Rust
+- [x] Implement HUB75 DMA support
+- [ ] Add moving clouds animation
+- [ ] Implement automatic display dimming
+- [ ] Add dynamic weather effects (sunny, cloudy, rain)
+- [ ] Display current temperature
+
 ## Dependencies
 
 This project relies on several key Rust crates:
