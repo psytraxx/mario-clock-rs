@@ -37,7 +37,7 @@ extern crate alloc;
 
 const ROWS: usize = 64;
 const COLS: usize = 64;
-const BITS: u8 = 2;
+const BITS: u8 = 4;
 const NROWS: usize = compute_rows(ROWS);
 const FRAME_COUNT: usize = compute_frame_count(BITS);
 

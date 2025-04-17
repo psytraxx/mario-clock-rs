@@ -83,14 +83,15 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             .await
             .unwrap();
 
-        let response = sntp_process_response(addr, self.socket.as_ref().unwrap(), context, req)
-            .await
-            .expect("Failed to process NTP response");
-
-        println!("received NTP response: {:?}", response);
-        TIME_OFFSET_SECONDS.store(response.seconds, Ordering::Relaxed);
-
-        self.set_rtc();
+        if let Ok(response) =
+            sntp_process_response(addr, self.socket.as_ref().unwrap(), context, req).await
+        {
+            println!("received NTP response: {:?}", response);
+            TIME_OFFSET_SECONDS.store(response.seconds, Ordering::Relaxed);
+            self.set_rtc();
+        } else {
+            println!("Failed to process NTP response");
+        }
 
         Ok(())
     }
