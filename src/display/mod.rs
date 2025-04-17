@@ -18,7 +18,8 @@ fn to_rgb888(color: u16) -> Rgb888 {
     let r5 = ((color >> 11) & 0x1F) as u8;
     let g6 = ((color >> 5) & 0x3F) as u8;
     let b5 = (color & 0x1F) as u8;
-    let rgb565: Rgb565 = Rgb565::new(r5, g6, b5);
+    // Convert to 8-bit RGB888 and dim it down
+    let rgb565: Rgb565 = Rgb565::new(r5 / 4, g6 / 4, b5 / 4);
 
     rgb565.into()
 }
