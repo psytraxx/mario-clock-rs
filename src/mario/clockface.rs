@@ -1,6 +1,7 @@
 use chrono::Timelike;
 use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
+use heapless::Vec;
 use static_cell::StaticCell;
 
 use crate::{
@@ -10,9 +11,15 @@ use crate::{
     ClockfaceTrait, FBType, I2CType, COLS, ROWS,
 };
 
+use crate::{
+    // ... other imports ...
+    mk_static, // Make sure mk_static! is accessible or defined here
+};
+
 use super::gfx::{
     assets::{BUSH, CLOUD1, CLOUD2, GROUND, HILL, SKY_COLOR},
     block::Block,
+    generate_cloud,
     mario::Mario,
 };
 
@@ -20,7 +27,7 @@ static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4
     StaticCell::new();
 
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 100; // Move cloud every X update cycles
+const CLOUD_MOVE_INTERVAL: u32 = 1; // Move cloud every X update cycles
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
 
 // Track the last minute when Mario jumped to prevent multiple jumps per minute
@@ -56,10 +63,16 @@ impl Clockface {
         let mut minute_block = Block::new(32, 8);
         minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
+        let cloud1 = mk_static!(
+            Vec<u16,512>,
+            generate_cloud(24, 13, 3, 1).expect("Failed to generate cloud")
+        );
+
         Self {
             ground: Tile::new(GROUND, 8, 8),
             bush: Object::new(BUSH, 21, 9),
-            cloud1: Object::new(CLOUD1, 13, 12),
+
+            cloud1: Object::new(cloud1, 24, 13),
             cloud2: Object::new(CLOUD2, 13, 12),
             hill: Object::new(HILL, 20, 22),
             mario,

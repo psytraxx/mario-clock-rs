@@ -9,6 +9,11 @@ pub const M_SHOES: u16 = 0xC300;
 pub const M_SHIRT: u16 = 0x7BCF;
 pub const M_HAIR: u16 = 0x0000;
 
+use esp_println::println;
+use heapless::Vec;
+use num_traits::float::FloatCore;
+use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
+
 // Sprite data arrays
 pub const BLOCK: &[u16; 352] = &[
     _MASK, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40, 0x9A40,
@@ -127,6 +132,111 @@ pub const CLOUD2: &[u16; 156] = &[
     0xFFFF, 0xFFFF, 0x0000, _MASK, // 0x0090 (144) pixels
     _MASK, _MASK, _MASK, _MASK, _MASK, 0x0000, 0x0000, _MASK, 0x0000, 0x0000, 0x0000, _MASK,
 ];
+
+/// Generates cloud pixel data dynamically.
+///
+/// # Arguments
+///
+/// * `width`: The width of the cloud sprite.
+/// * `height`: The height of the cloud sprite.
+/// * `num_circles`: The number of circles to use for generating the cloud shape.
+/// * `seed`: A seed for the random number generator for deterministic results.
+///
+/// # Returns
+///
+/// An `Option<Vec<u16, 512>>` containing the pixel data for the generated cloud.
+/// The size of the Vec will be `width * height`.
+pub fn generate_cloud(
+    width: usize,
+    height: usize,
+    num_circles: u8,
+    seed: u64,
+) -> Option<Vec<u16, 512>> {
+    let size = width * height;
+    if size > 512 {
+        return None; // Ensure we don't exceed the heapless Vec capacity
+    }
+
+    // Initialize SmallRng with the provided seed
+    let mut rng = SmallRng::seed_from_u64(seed);
+
+    // Create a heapless Vec with the required size
+    let mut pixels: Vec<u16, 512> = Vec::new();
+    pixels.resize(size, SKY_COLOR).ok()?; // Initialize with sky color
+
+    let max_radius = (width.min(height) / 2) as f32;
+    let min_radius = max_radius * 0.5;
+
+    for _ in 0..num_circles {
+        // Generate radius first
+        let radius = rng.gen_range(min_radius..max_radius);
+        let radius_sq = radius * radius;
+
+        // Ensure the center allows the circle to fit within bounds
+        // The valid range for the center is from `radius` to `dimension - radius`
+        let center_x = rng.gen_range(radius..(width as f32 - radius));
+        let center_y = rng.gen_range(radius..(height as f32 - radius));
+
+        // Determine the bounding box for the circle to optimize pixel checks
+        let x_start = (center_x - radius).max(0.0).floor() as usize;
+        let x_end = (center_x + radius).min(width as f32).ceil() as usize;
+        let y_start = (center_y - radius).max(0.0).floor() as usize;
+        let y_end = (center_y + radius).min(height as f32).ceil() as usize;
+
+        // Iterate only over the bounding box pixels
+        for y in y_start..y_end.min(height) {
+            // Ensure y does not exceed height
+            for x in x_start..x_end.min(width) {
+                // Ensure x does not exceed width
+                let dx = x as f32 + 0.5 - center_x; // Use pixel center for check
+                let dy = y as f32 + 0.5 - center_y; // Use pixel center for check
+                if dx * dx + dy * dy <= radius_sq {
+                    // Use standard row-major indexing: y * width + x
+                    let idx = y * width + x;
+                    if let Some(pixel) = pixels.get_mut(idx) {
+                        *pixel = 0xFFFF; // White color for cloud body
+                    }
+                }
+            }
+        }
+    }
+
+    // Add bluish outline with random white sprinkles
+    for y in 0..height {
+        for x in 0..width {
+            // Use standard row-major indexing: y * width + x
+            let idx = y * width + x;
+            if pixels[idx] == 0xFFFF {
+                // Check neighbors for sky color to determine outline
+                let neighbors = [
+                    (x.wrapping_sub(1), y), // Left
+                    (x + 1, y),             // Right
+                    (x, y.wrapping_sub(1)), // Up
+                    (x, y + 1),             // Down
+                ];
+
+                for &(nx, ny) in &neighbors {
+                    if nx < width && ny < height {
+                        // Use standard row-major indexing: ny * width + nx
+                        let n_idx = ny * width + nx;
+                        if pixels.get(n_idx) == Some(&SKY_COLOR) {
+                            // Randomly sprinkle white on the outline
+                            if let Some(pixel) = pixels.get_mut(n_idx) {
+                                *pixel = if rng.next_u32() % 4 == 0 {
+                                    0xFFFF // White sprinkle
+                                } else {
+                                    0x3DFF // Bluish outline
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Some(pixels)
+}
 
 pub const GROUND: &[u16; 64] = &[
     0xE2C2, 0xF6B6, 0xF6B6, 0xF6B6, 0x0000, 0xE2C2, 0xF6B6, 0xE2C2, 0xF6B6, 0xE2C2, 0xE2C2, 0xE2C2,
