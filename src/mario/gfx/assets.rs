@@ -169,13 +169,13 @@ pub fn generate_cloud(
 
     for _ in 0..num_circles {
         // Generate radius first
-        let radius = rng.gen_range(min_radius..max_radius);
+        let radius = rng.random_range(min_radius..max_radius);
         let radius_sq = radius * radius;
 
         // Ensure the center allows the circle to fit within bounds
         // The valid range for the center is from `radius` to `dimension - radius`
-        let center_x = rng.gen_range(radius..(width as f32 - radius));
-        let center_y = rng.gen_range(radius..(height as f32 - radius));
+        let center_x = rng.random_range(radius..(width as f32 - radius));
+        let center_y = rng.random_range(radius..(height as f32 - radius));
 
         // Determine the bounding box for the circle to optimize pixel checks
         let x_start = (center_x - radius).max(0.0).floor() as usize;
@@ -201,35 +201,39 @@ pub fn generate_cloud(
         }
     }
 
-    // Add bluish outline with random white sprinkles
+    // NEW: Identify boundary pixels (cloud pixel adjacent to sky)
+    let original = pixels.clone();
+    let mut boundary = [false; 512];
     for y in 0..height {
         for x in 0..width {
-            // Use standard row-major indexing: y * width + x
             let idx = y * width + x;
-            if pixels[idx] == 0xFFFF {
-                // Check neighbors for sky color to determine outline
-                let neighbors = [
-                    (x.wrapping_sub(1), y), // Left
-                    (x + 1, y),             // Right
-                    (x, y.wrapping_sub(1)), // Up
-                    (x, y + 1),             // Down
-                ];
-
-                for &(nx, ny) in &neighbors {
-                    if nx < width && ny < height {
-                        // Use standard row-major indexing: ny * width + nx
-                        let n_idx = ny * width + nx;
-                        if pixels.get(n_idx) == Some(&SKY_COLOR) {
-                            // Randomly sprinkle white on the outline
-                            if let Some(pixel) = pixels.get_mut(n_idx) {
-                                *pixel = if rng.next_u32() % 4 == 0 {
-                                    0xFFFF // White sprinkle
-                                } else {
-                                    0x3DFF // Bluish outline
-                                };
-                            }
-                        }
-                    }
+            if original[idx] == 0xFFFF
+                && ((x == 0 || original[y * width + (x - 1)] == SKY_COLOR)
+                    || (x == width - 1 || original[y * width + (x + 1)] == SKY_COLOR)
+                    || (y == 0 || original[(y - 1) * width + x] == SKY_COLOR)
+                    || (y == height - 1 || original[(y + 1) * width + x] == SKY_COLOR))
+            {
+                boundary[idx] = true;
+            }
+        }
+    }
+    // NEW: Inset the edge: for interior cloud pixels next to boundary, set outline color
+    for y in 1..height - 1 {
+        for x in 1..width - 1 {
+            let idx = y * width + x;
+            if original[idx] == 0xFFFF
+                && !boundary[idx]
+                && (boundary[idx - 1]
+                    || boundary[idx + 1]
+                    || boundary[idx - width]
+                    || boundary[idx + width])
+            {
+                if let Some(pixel) = pixels.get_mut(idx) {
+                    *pixel = if rng.next_u32() % 4 == 0 {
+                        0xFFFF // White sprinkle
+                    } else {
+                        0x3DFF // Bluish outline
+                    };
                 }
             }
         }

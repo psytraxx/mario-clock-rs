@@ -27,7 +27,7 @@ static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4
     StaticCell::new();
 
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 1; // Move cloud every X update cycles
+const CLOUD_MOVE_INTERVAL: u32 = 20; // Move cloud every X update cycles
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
 
 // Track the last minute when Mario jumped to prevent multiple jumps per minute
