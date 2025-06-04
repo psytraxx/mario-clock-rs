@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::gfx::{
-    assets::{BUSH, CLOUD1, CLOUD2, GROUND, HILL, SKY_COLOR},
+    assets::{BUSH, CLOUD2, GROUND, HILL, SKY_COLOR},
     block::Block,
     generate_cloud,
     mario::Mario,
@@ -22,7 +22,7 @@ static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4
     StaticCell::new();
 
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 1; // Move cloud every X update cycles
+const CLOUD_MOVE_INTERVAL: u32 = 5; // Move cloud every X update cycles
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
 const CLOUD1_WIDTH: usize = 24;
 const CLOUD1_HEIGHT: usize = 13;

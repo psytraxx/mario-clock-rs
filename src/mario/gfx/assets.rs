@@ -87,7 +87,7 @@ pub const BUSH: &[u16; 189] = &[
     0xBFE3,
 ];
 
-pub const CLOUD1: &[u16; 156] = &[
+/* pub const CLOUD1: &[u16; 156] = &[
     _MASK, 0x0000, 0x0000, 0x0000, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK,
     0x0000, 0xFFFF, 0xFFFF, // 0x0010 (16) pixels
     0xFFFF, 0x0000, 0x0000, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, 0x0000, 0xFFFF,
@@ -107,7 +107,7 @@ pub const CLOUD1: &[u16; 156] = &[
     _MASK, _MASK, 0xFFFF, 0xFFFF, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0x0000, 0x0000, 0x0000, _MASK,
     _MASK, _MASK, _MASK, 0x0000, // 0x0090 (144) pixels
     0x0000, _MASK, 0x0000, 0x0000, 0x0000, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK,
-];
+]; */
 
 pub const CLOUD2: &[u16; 156] = &[
     _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, _MASK, 0x0000, 0x0000, 0x0000, _MASK, _MASK, _MASK,
