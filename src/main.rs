@@ -23,7 +23,7 @@ use esp_hal::{
 use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
 use esp_println::{logger::init_logger, println};
-use wifi_task::{connect_to_wifi, STOP_WIFI_SIGNAL};
+use wifi_task::{connect_to_wifi, shutdown_wifi};
 
 mod clock;
 mod display;
@@ -171,9 +171,10 @@ async fn main(spawner: Spawner) {
     let time = Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich);
     println!("Current time: {}", time);
 
-    println!("Request to disconnect wifi");
+    println!("Shutting down WiFi and network stack");
 
-    STOP_WIFI_SIGNAL.signal(());
+    // Properly shutdown WiFi
+    shutdown_wifi().await;
 
     loop {
         // The main task keeps running so the executor doesn't exit
