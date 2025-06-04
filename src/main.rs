@@ -21,7 +21,7 @@ use esp_hal::{
     Blocking,
 };
 use esp_hal_embassy::{main, InterruptExecutor};
-use esp_hub75::framebuffer::{compute_frame_count, compute_rows, latched::DmaFrameBuffer};
+use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
 use esp_println::println;
 use wifi_task::{connect_to_wifi, STOP_WIFI_SIGNAL};
 
