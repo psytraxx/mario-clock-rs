@@ -1397,6 +1397,7 @@ dependencies = [
  "esp-println",
  "esp-wifi",
  "heapless",
+ "log",
  "pcf8563",
  "sntpc",
  "static_cell",

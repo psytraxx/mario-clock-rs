@@ -22,7 +22,7 @@ use esp_hal::{
 };
 use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
-use esp_println::println;
+use esp_println::{logger::init_logger, println};
 use wifi_task::{connect_to_wifi, STOP_WIFI_SIGNAL};
 
 mod clock;
@@ -62,6 +62,8 @@ pub(crate) trait ClockfaceTrait {
 
 #[main]
 async fn main(spawner: Spawner) {
+    init_logger(log::LevelFilter::Info);
+
     let peripherals = esp_hal::init(esp_hal::Config::default());
 
     // --- RTC Initialization Start ---
