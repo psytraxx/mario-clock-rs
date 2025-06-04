@@ -20,11 +20,28 @@ static STACK_RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 /// Signal to request to stop WiFi
 pub(crate) static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
+/// Signal to stop network task
+static STOP_NET_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// Shutdown WiFi and clean up resources
+pub async fn shutdown_wifi() {
+    println!("Requesting WiFi shutdown...");
+
+    // Signal both tasks to stop
+    STOP_WIFI_SIGNAL.signal(());
+    STOP_NET_SIGNAL.signal(());
+
+    // Wait longer for proper cleanup
+    Timer::after(Duration::from_millis(3000)).await;
+
+    println!("WiFi shutdown complete");
+}
+
 pub async fn connect_to_wifi(
-    wifi: peripherals::WIFI,
-    timer: esp_hal::timer::timg::Timer,
-    radio_clocks: peripherals::RADIO_CLK,
-    rng: RNG,
+    wifi: peripherals::WIFI<'static>,
+    timer: esp_hal::timer::timg::Timer<'static>,
+    radio_clocks: peripherals::RADIO_CLK<'static>,
+    rng: RNG<'static>,
     spawner: Spawner,
 ) -> Result<Stack<'static>, WifiError> {
     let mut rng = Rng::new(rng);
@@ -72,7 +89,18 @@ pub async fn connect_to_wifi(
 
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
-    runner.run().await
+    use embassy_futures::select::{select, Either};
+
+    match select(runner.run(), STOP_NET_SIGNAL.wait()).await {
+        Either::First(_) => {
+            // Runner completed
+        }
+        Either::Second(_) => {
+            // Stop signal received
+            println!("Network task received stop signal");
+        }
+    }
+    println!("Network task stopped");
 }
 
 /// Task for WiFi connection
@@ -121,7 +149,14 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
                 println!("Wait for request to stop wifi");
                 STOP_WIFI_SIGNAL.wait().await;
                 println!("Received signal to stop wifi");
-                controller.stop_async().await?;
+
+                // Proper shutdown sequence
+                if let Err(e) = controller.disconnect_async().await {
+                    println!("Error disconnecting: {:?}", e);
+                }
+                if let Err(e) = controller.stop_async().await {
+                    println!("Error stopping controller: {:?}", e);
+                }
                 break;
             }
             Err(error) => {
