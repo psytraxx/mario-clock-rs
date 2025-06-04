@@ -2,8 +2,16 @@ use core::sync::atomic::Ordering;
 
 use embassy_executor::task;
 use embassy_time::{Duration, Instant};
-use esp_hal::{gpio::AnyPin, peripherals::LCD_CAM, system::Cpu, time::Rate};
-use esp_hub75::{lcd_cam::Hub75, Hub75Pins};
+use esp_hal::{
+    gpio::Pin,
+    peripherals::{
+        DMA_CH0, GPIO10, GPIO11, GPIO2, GPIO21, GPIO3, GPIO33, GPIO34, GPIO35, GPIO36, GPIO37,
+        GPIO38, GPIO39, GPIO6, GPIO7, LCD_CAM,
+    },
+    system::Cpu,
+    time::Rate,
+};
+use esp_hub75::{Hub75, Hub75Pins16};
 use esp_println::println;
 
 use crate::{FBType, FrameBufferExchange, REFRESH_RATE};
@@ -11,22 +19,22 @@ use crate::{FBType, FrameBufferExchange, REFRESH_RATE};
 type Hub75Type = Hub75<'static, esp_hal::Async>;
 
 pub(crate) struct Hub75Peripherals {
-    pub lcd_cam: LCD_CAM,
-    pub dma_channel: esp_hal::dma::DmaChannel0,
-    pub red1: AnyPin,
-    pub grn1: AnyPin,
-    pub blu1: AnyPin,
-    pub red2: AnyPin,
-    pub grn2: AnyPin,
-    pub blu2: AnyPin,
-    pub addr0: AnyPin,
-    pub addr1: AnyPin,
-    pub addr2: AnyPin,
-    pub addr3: AnyPin,
-    pub addr4: AnyPin,
-    pub blank: AnyPin,
-    pub clock: AnyPin,
-    pub latch: AnyPin,
+    pub lcd_cam: LCD_CAM<'static>,
+    pub dma_channel: DMA_CH0<'static>,
+    pub red1: GPIO2<'static>,
+    pub grn1: GPIO6<'static>,
+    pub blu1: GPIO10<'static>,
+    pub red2: GPIO3<'static>,
+    pub grn2: GPIO7<'static>,
+    pub blu2: GPIO11<'static>,
+    pub addr0: GPIO39<'static>,
+    pub addr1: GPIO38<'static>,
+    pub addr2: GPIO37<'static>,
+    pub addr3: GPIO36<'static>,
+    pub addr4: GPIO21<'static>,
+    pub blank: GPIO35<'static>,
+    pub clock: GPIO34<'static>,
+    pub latch: GPIO33<'static>,
 }
 
 #[task]
@@ -40,21 +48,21 @@ pub(crate) async fn hub75_task(
     let channel = peripherals.dma_channel;
     let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, size_of::<FBType>());
 
-    let pins = Hub75Pins {
-        red1: peripherals.red1,
-        grn1: peripherals.grn1,
-        blu1: peripherals.blu1,
-        red2: peripherals.red2,
-        grn2: peripherals.grn2,
-        blu2: peripherals.blu2,
-        addr0: peripherals.addr0,
-        addr1: peripherals.addr1,
-        addr2: peripherals.addr2,
-        addr3: peripherals.addr3,
-        addr4: peripherals.addr4,
-        blank: peripherals.blank,
-        clock: peripherals.clock,
-        latch: peripherals.latch,
+    let pins = Hub75Pins16 {
+        red1: peripherals.red1.degrade(),
+        grn1: peripherals.grn1.degrade(),
+        blu1: peripherals.blu1.degrade(),
+        red2: peripherals.red2.degrade(),
+        grn2: peripherals.grn2.degrade(),
+        blu2: peripherals.blu2.degrade(),
+        addr0: peripherals.addr0.degrade(),
+        addr1: peripherals.addr1.degrade(),
+        addr2: peripherals.addr2.degrade(),
+        addr3: peripherals.addr3.degrade(),
+        addr4: peripherals.addr4.degrade(),
+        blank: peripherals.blank.degrade(),
+        clock: peripherals.clock.degrade(),
+        latch: peripherals.latch.degrade(),
     };
 
     let mut hub75 = Hub75Type::new_async(

@@ -13,7 +13,6 @@ use embassy_time::{Duration, Timer};
 use esp_alloc::heap_allocator;
 use esp_backtrace as _;
 use esp_hal::{
-    gpio::Pin,
     i2c::master::{Config, I2c},
     interrupt::{software::SoftwareInterruptControl, Priority},
     system::{CpuControl, Stack},
@@ -22,8 +21,7 @@ use esp_hal::{
     Blocking,
 };
 use esp_hal_embassy::{main, InterruptExecutor};
-use esp_hub75::framebuffer::DmaFrameBuffer;
-use esp_hub75::framebuffer::{compute_frame_count, compute_rows};
+use esp_hub75::framebuffer::{compute_frame_count, compute_rows, latched::DmaFrameBuffer};
 use esp_println::println;
 use wifi_task::{connect_to_wifi, STOP_WIFI_SIGNAL};
 
@@ -100,20 +98,20 @@ async fn main(spawner: Spawner) {
     let hub75_peripherals = Hub75Peripherals {
         lcd_cam: peripherals.LCD_CAM,
         dma_channel: peripherals.DMA_CH0,
-        red1: peripherals.GPIO2.degrade(),
-        grn1: peripherals.GPIO6.degrade(),
-        blu1: peripherals.GPIO10.degrade(),
-        red2: peripherals.GPIO3.degrade(),
-        grn2: peripherals.GPIO7.degrade(),
-        blu2: peripherals.GPIO11.degrade(),
-        addr0: peripherals.GPIO39.degrade(),
-        addr1: peripherals.GPIO38.degrade(),
-        addr2: peripherals.GPIO37.degrade(),
-        addr3: peripherals.GPIO36.degrade(),
-        addr4: peripherals.GPIO21.degrade(),
-        blank: peripherals.GPIO35.degrade(),
-        clock: peripherals.GPIO34.degrade(),
-        latch: peripherals.GPIO33.degrade(),
+        red1: peripherals.GPIO2,
+        grn1: peripherals.GPIO6,
+        blu1: peripherals.GPIO10,
+        red2: peripherals.GPIO3,
+        grn2: peripherals.GPIO7,
+        blu2: peripherals.GPIO11,
+        addr0: peripherals.GPIO39,
+        addr1: peripherals.GPIO38,
+        addr2: peripherals.GPIO37,
+        addr3: peripherals.GPIO36,
+        addr4: peripherals.GPIO21,
+        blank: peripherals.GPIO35,
+        clock: peripherals.GPIO34,
+        latch: peripherals.GPIO33,
     };
 
     // run hub75 and display on second core

@@ -21,10 +21,10 @@ static STACK_RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 pub(crate) static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 pub async fn connect_to_wifi(
-    wifi: peripherals::WIFI,
-    timer: esp_hal::timer::timg::Timer,
-    radio_clocks: peripherals::RADIO_CLK,
-    rng: RNG,
+    wifi: peripherals::WIFI<'static>,
+    timer: esp_hal::timer::timg::Timer<'static>,
+    radio_clocks: peripherals::RADIO_CLK<'static>,
+    rng: RNG<'static>,
     spawner: Spawner,
 ) -> Result<Stack<'static>, WifiError> {
     let mut rng = Rng::new(rng);
