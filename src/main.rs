@@ -1,5 +1,10 @@
 #![no_std]
 #![no_main]
+#![deny(
+    clippy::mem_forget,
+    reason = "mem::forget is generally not safe to do with esp_hal types, especially those \
+    holding buffers for the duration of a data transfer."
+)]
 
 use clock::{Clock, ClockBuffs};
 use core::{future::Future, sync::atomic::AtomicU32};
@@ -22,7 +27,7 @@ use esp_hal::{
     Blocking,
 };
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
-use esp_println::{logger::init_logger, println};
+use esp_println::{logger::init_logger_from_env, println};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
 use wifi_task::{connect_to_wifi, shutdown_wifi};
@@ -34,6 +39,10 @@ mod mario;
 mod wifi_task;
 
 extern crate alloc;
+
+// This creates a default app-descriptor required by the esp-idf bootloader.
+// For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
+esp_bootloader_esp_idf::esp_app_desc!();
 
 const ROWS: usize = 64;
 const COLS: usize = 64;
@@ -62,13 +71,11 @@ pub(crate) trait ClockfaceTrait {
     fn update(&mut self, fb: &mut FBType) -> impl Future<Output = ()> + Send;
 }
 
-esp_bootloader_esp_idf::esp_app_desc!();
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
     heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 73744);
 
-    init_logger(log::LevelFilter::Info);
+    init_logger_from_env();
 
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
