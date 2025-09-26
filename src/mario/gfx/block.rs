@@ -127,7 +127,7 @@ impl Block {
 
         // --- 2. Update Displayed Text ---
         // Format the current value (e.g., hour/minute) with leading zero
-        let formatted_text = format!("{:02}", current_value);
+        let formatted_text = format!("{current_value:02}");
         self.set_text(formatted_text.as_str());
 
         // --- 3. Update State and Position (Animation Logic) ---
