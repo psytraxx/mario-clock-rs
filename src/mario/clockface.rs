@@ -1,7 +1,7 @@
 use chrono::Timelike;
 use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
-use heapless::Vec;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use static_cell::StaticCell;
 
 use crate::{
@@ -9,11 +9,6 @@ use crate::{
     display::fill_rect,
     engine::{object::Object, tile::Tile, Event, Sprite},
     ClockfaceTrait, FBType, I2CType, COLS, ROWS,
-};
-
-use crate::{
-    // ... other imports ...
-    mk_static, // Make sure mk_static! is accessible or defined here
 };
 
 use super::gfx::{
@@ -27,8 +22,11 @@ static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4
     StaticCell::new();
 
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 20; // Move cloud every X update cycles
+const CLOUD_MOVE_INTERVAL: u32 = 1; // Move cloud every X update cycles
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
+const CLOUD1_WIDTH: usize = 24;
+const CLOUD1_HEIGHT: usize = 13;
+const INITIAL_CLOUD1_SEED: u64 = 1; // Define initial seed
 
 // Track the last minute when Mario jumped to prevent multiple jumps per minute
 // Initialized to 255 (invalid minute) to ensure first jump always triggers
@@ -48,6 +46,8 @@ pub(crate) struct Clockface {
     cloud2_x: i32,
     // Frame counter for slow movement
     frame_count: u32,
+    // Seed for cloud1 generation
+    cloud1_seed: u64,
 }
 
 impl Clockface {
@@ -63,25 +63,29 @@ impl Clockface {
         let mut minute_block = Block::new(32, 8);
         minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
-        let cloud1 = mk_static!(
-            Vec<u16,512>,
-            generate_cloud(24, 13, 3, 1).expect("Failed to generate cloud")
-        );
+        let initial_seed = INITIAL_CLOUD1_SEED;
+        let cloud1_array = generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, 3, initial_seed)
+            .expect("Failed to generate initial cloud");
+        let cloud1_size = CLOUD1_WIDTH * CLOUD1_HEIGHT;
 
         Self {
             ground: Tile::new(GROUND, 8, 8),
             bush: Object::new(BUSH, 21, 9),
-
-            cloud1: Object::new(cloud1, 24, 13),
+            cloud1: Object::new(
+                &cloud1_array[0..cloud1_size],
+                CLOUD1_WIDTH as i32,
+                CLOUD1_HEIGHT as i32,
+            ),
             cloud2: Object::new(CLOUD2, 13, 12),
             hill: Object::new(HILL, 20, 22),
             mario,
             hour_block,
             minute_block,
             // Initial cloud positions
-            cloud1_x: 0,    // Start cloud1 near the left
-            cloud2_x: 51,   // Start cloud2 further right
-            frame_count: 0, // Initialize frame counter
+            cloud1_x: 0,               // Start cloud1 near the left
+            cloud2_x: 51,              // Start cloud2 further right
+            frame_count: 0,            // Initialize frame counter
+            cloud1_seed: initial_seed, // Store initial seed
         }
     }
 
@@ -89,8 +93,9 @@ impl Clockface {
         Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich)
     }
 
-    /// Updates the position of a cloud based on frame count, wrapping it around the screen.
-    fn update_cloud_position(x: &mut i32, width: i32, frame_count: u32) {
+    /// Updates the position of a cloud, returns true if it wrapped.
+    fn update_cloud_position(x: &mut i32, width: i32, frame_count: u32) -> bool {
+        let mut wrapped = false;
         // Only move the cloud every CLOUD_MOVE_INTERVAL frames
         if frame_count % CLOUD_MOVE_INTERVAL == 0 {
             *x -= CLOUD_PIXELS_PER_MOVE;
@@ -98,8 +103,10 @@ impl Clockface {
             if *x + width < 0 {
                 // Reset its position to the right edge
                 *x = COLS as i32;
+                wrapped = true; // Signal that wrapping occurred
             }
         }
+        wrapped
     }
 }
 
@@ -111,10 +118,29 @@ impl ClockfaceTrait for Clockface {
         // --- 1. Clear Background ---
         fill_rect(fb, 0, 0, ROWS as u32, COLS as u32, SKY_COLOR);
 
-        // --- 2. Update Cloud Positions ---
-        // Pass the current frame count to the update function
-        Self::update_cloud_position(&mut self.cloud1_x, 24, self.frame_count);
+        // --- 2. Update Cloud Positions & Regenerate cloud1 if needed ---
+        let cloud1_wrapped =
+            Self::update_cloud_position(&mut self.cloud1_x, CLOUD1_WIDTH as i32, self.frame_count);
         Self::update_cloud_position(&mut self.cloud2_x, 24, self.frame_count);
+
+        if cloud1_wrapped {
+            // Update seed - using frame_count ensures variety
+            self.cloud1_seed = self.frame_count as u64;
+
+            let mut rng = SmallRng::seed_from_u64(self.cloud1_seed);
+            let circles = rng.random_range(3..8);
+            // Regenerate cloud data
+            let cloud1_array =
+                generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, circles, self.cloud1_seed)
+                    .expect("Failed to regenerate cloud");
+            let cloud1_size = CLOUD1_WIDTH * CLOUD1_HEIGHT;
+            // Replace the cloud1 object with a new one containing the new data
+            self.cloud1 = Object::new(
+                &cloud1_array[0..cloud1_size],
+                CLOUD1_WIDTH as i32,
+                CLOUD1_HEIGHT as i32,
+            );
+        }
 
         // --- 3. Draw Static Background Elements ---
         self.ground.fill_row(COLS as i32 - self.ground.height(), fb);

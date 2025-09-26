@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rand = { version = "0.9.1", default-features = false, features = [
+    "log",
+    "alloc",
+    "small_rng",
+] }
 esp-hal = { version = "=1.0.0-rc.1", features = [
     "esp32s3",
     "log-04",
@@ -61,12 +66,9 @@ sntpc = { version = "0.6.1", default-features = false, features = [
 ] }
 chrono = { version = "0.4.42", default-features = false }
 chrono-tz = { version = "0.10.4", default-features = false }
-rand = { version = "0.9.1", default-features = false, features = [
-    "log",
-    "alloc",
-    "small_rng",
+micromath = { version = "2.1.0", default-features = false, features = [
+    "num-traits",
 ] }
-num-traits = { version = "0.2.19", default-features = false }
 embassy-futures = { version = "0.1.2", features = ["log"] }
 
 [profile.dev]

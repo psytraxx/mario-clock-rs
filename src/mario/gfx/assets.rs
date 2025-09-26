@@ -9,9 +9,7 @@ pub const M_SHOES: u16 = 0xC300;
 pub const M_SHIRT: u16 = 0x7BCF;
 pub const M_HAIR: u16 = 0x0000;
 
-use esp_println::println;
-use heapless::Vec;
-use num_traits::float::FloatCore;
+use micromath::F32Ext;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 
 // Sprite data arrays
@@ -144,102 +142,134 @@ pub const CLOUD2: &[u16; 156] = &[
 ///
 /// # Returns
 ///
-/// An `Option<Vec<u16, 512>>` containing the pixel data for the generated cloud.
-/// The size of the Vec will be `width * height`.
+/// An `Option<[u16; 512]>` containing the pixel data for the generated cloud
+/// within a fixed-size buffer. The relevant part corresponds to `width * height`.
 pub fn generate_cloud(
     width: usize,
     height: usize,
     num_circles: u8,
     seed: u64,
-) -> Option<Vec<u16, 512>> {
+) -> Option<[u16; 512]> {
     let size = width * height;
-    if size > 512 {
-        return None; // Ensure we don't exceed the heapless Vec capacity
+    if size == 0 || size > 512 {
+        return None; // Ensure size is valid and doesn't exceed capacity
     }
 
-    // Initialize SmallRng with the provided seed
+    // Initialize RNG and pixel buffer (stack-allocated array)
     let mut rng = SmallRng::seed_from_u64(seed);
+    let mut pixels = [SKY_COLOR; 512]; // Use fixed-size array
 
-    // Create a heapless Vec with the required size
-    let mut pixels: Vec<u16, 512> = Vec::new();
-    pixels.resize(size, SKY_COLOR).ok()?; // Initialize with sky color
-
-    let max_radius = (width.min(height) / 2) as f32;
-    let min_radius = max_radius * 0.5;
+    // --- Generate Circles ---
+    let max_radius = (width.min(height) as f32 / 2.0).max(1.0); // Ensure radius is at least 1
+    let min_radius = (max_radius * 0.5).max(1.0);
 
     for _ in 0..num_circles {
-        // Generate radius first
         let radius = rng.random_range(min_radius..max_radius);
         let radius_sq = radius * radius;
 
-        // Ensure the center allows the circle to fit within bounds
-        // The valid range for the center is from `radius` to `dimension - radius`
-        let center_x = rng.random_range(radius..(width as f32 - radius));
-        let center_y = rng.random_range(radius..(height as f32 - radius));
+        // Calculate valid center range, ensuring max >= min
+        let center_x_min = radius;
+        let center_x_max = (width as f32 - radius).max(center_x_min);
+        let center_x = if center_x_min >= center_x_max {
+            center_x_min
+        } else {
+            rng.random_range(center_x_min..center_x_max)
+        };
 
-        // Determine the bounding box for the circle to optimize pixel checks
+        let center_y_min = radius;
+        let center_y_max = (height as f32 - radius).max(center_y_min);
+        let center_y = if center_y_min >= center_y_max {
+            center_y_min
+        } else {
+            let t: f32 = rng.random();
+            let t_biased = t.sqrt(); // Bias towards bottom
+            center_y_min + t_biased * (center_y_max - center_y_min)
+        };
+
+        // Calculate bounding box, clamping to image dimensions
         let x_start = (center_x - radius).max(0.0).floor() as usize;
-        let x_end = (center_x + radius).min(width as f32).ceil() as usize;
+        let x_end = ((center_x + radius).ceil() as usize).min(width);
         let y_start = (center_y - radius).max(0.0).floor() as usize;
-        let y_end = (center_y + radius).min(height as f32).ceil() as usize;
+        let y_end = ((center_y + radius).ceil() as usize).min(height);
 
-        // Iterate only over the bounding box pixels
-        for y in y_start..y_end.min(height) {
-            // Ensure y does not exceed height
-            for x in x_start..x_end.min(width) {
-                // Ensure x does not exceed width
-                let dx = x as f32 + 0.5 - center_x; // Use pixel center for check
-                let dy = y as f32 + 0.5 - center_y; // Use pixel center for check
+        // Draw circle within bounding box
+        for y in y_start..y_end {
+            for x in x_start..x_end {
+                let dx = x as f32 + 0.5 - center_x;
+                let dy = y as f32 + 0.5 - center_y;
                 if dx * dx + dy * dy <= radius_sq {
-                    // Use standard row-major indexing: y * width + x
                     let idx = y * width + x;
-                    if let Some(pixel) = pixels.get_mut(idx) {
-                        *pixel = 0xFFFF; // White color for cloud body
-                    }
+                    // Direct array access (ensure idx is always < size <= 512)
+                    pixels[idx] = 0xFFFF; // White
                 }
             }
         }
     }
 
-    // NEW: Identify boundary pixels (cloud pixel adjacent to sky)
-    let original = pixels.clone();
-    let mut boundary = [false; 512];
+    // --- Apply Outline ---
+    // No need to clone pixels; we read from it to determine boundary, then modify it.
+    let mut boundary = [false; 512]; // Buffer for boundary flags
+
+    // 1. Identify boundary pixels (reading from the current state of pixels)
     for y in 0..height {
         for x in 0..width {
             let idx = y * width + x;
-            if original[idx] == 0xFFFF
-                && ((x == 0 || original[y * width + (x - 1)] == SKY_COLOR)
-                    || (x == width - 1 || original[y * width + (x + 1)] == SKY_COLOR)
-                    || (y == 0 || original[(y - 1) * width + x] == SKY_COLOR)
-                    || (y == height - 1 || original[(y + 1) * width + x] == SKY_COLOR))
-            {
-                boundary[idx] = true;
+            if pixels[idx] == 0xFFFF {
+                // Is it a cloud pixel?
+                let neighbors = [
+                    (x.wrapping_sub(1), y), // Left
+                    (x + 1, y),             // Right
+                    (x, y.wrapping_sub(1)), // Top
+                    (x, y + 1),             // Bottom
+                ];
+
+                let mut is_boundary = false;
+                for (nx, ny) in neighbors {
+                    // Check if neighbor is outside bounds OR is sky color
+                    if nx >= width || ny >= height || pixels[ny * width + nx] == SKY_COLOR {
+                        is_boundary = true;
+                        break;
+                    }
+                }
+                // Ensure index is within bounds for the boundary array
+                if idx < 512 {
+                    boundary[idx] = is_boundary;
+                }
             }
         }
     }
-    // NEW: Inset the edge: for interior cloud pixels next to boundary, set outline color
-    for y in 1..height - 1 {
-        for x in 1..width - 1 {
+
+    // 2. Inset the edge (apply outline color, modifying pixels array)
+    // Need to read original state for this pass. Let's re-introduce the clone here,
+    // or perform the check differently. A clone is simpler for now.
+    let original_pixels = pixels; // Clone the state after circle generation
+
+    for y in 1..(height.saturating_sub(1)) {
+        for x in 1..(width.saturating_sub(1)) {
             let idx = y * width + x;
-            if original[idx] == 0xFFFF
-                && !boundary[idx]
-                && (boundary[idx - 1]
-                    || boundary[idx + 1]
-                    || boundary[idx - width]
-                    || boundary[idx + width])
-            {
-                if let Some(pixel) = pixels.get_mut(idx) {
-                    *pixel = if rng.next_u32() % 4 == 0 {
-                        0xFFFF // White sprinkle
+
+            // Check if it's an interior cloud pixel (originally white and not marked as boundary)
+            // Read from original_pixels for the state check
+            if idx < 512 && original_pixels[idx] == 0xFFFF && !boundary[idx] {
+                // Check if any orthogonal neighbor IS a boundary pixel
+                let is_near_boundary = boundary[idx.wrapping_sub(1)]    // Left
+                                    || boundary[idx + 1]                // Right
+                                    || boundary[idx.wrapping_sub(width)] // Top
+                                    || boundary[idx + width]; // Bottom
+
+                if is_near_boundary {
+                    // Apply randomized outline color directly to pixels array
+                    pixels[idx] = if rng.next_u32() % 4 == 0 {
+                        0xFFFF
                     } else {
-                        0x3DFF // Bluish outline
+                        0x3DFF
                     };
                 }
             }
         }
     }
 
-    Some(pixels)
+    Some(pixels) // Return the modified array
 }
 
 pub const GROUND: &[u16; 64] = &[
