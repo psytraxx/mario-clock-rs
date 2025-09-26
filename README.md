@@ -152,3 +152,29 @@ This project is distributed under the MIT license. See `LICENSE` for more inform
 - [Clockwise project](https://github.com/jnthas/clockwise) by jnthas for the original inspiration
 - The Embassy team for their excellent embedded async runtime
 - The esp-rs working group for their Rust support on ESP32 devices
+
+
+## QEMU Emulation
+
+To run the project in QEMU, you'll need to build Espressif's QEMU fork which includes ESP32-S3 support:
+
+```bash
+# Clone and build Espressif's QEMU
+git clone https://github.com/espressif/qemu.git
+cd qemu
+./configure --enable-gcrypt --target-list=xtensa-softmmu
+make -j$(nproc)
+```
+
+Then build and run your project:
+
+```bash
+# Build the project
+cargo build --release
+
+# Create QEMU-compatible image
+espflash save-image --chip esp32s3 --merge target/xtensa-esp32s3-none-elf/release/super-mario-clock image.bin
+
+# Run in QEMU
+qemu-system-xtensa --nographic -machine esp32s3 -drive file=image.bin,if=mtd,format=raw -m 4M
+```
