@@ -154,10 +154,10 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             .and_then(|addrs| {
                 addrs
                     .iter()
-                    .find_map(|item| match item {
-                        IpAddress::Ipv4(v4) => Some(*v4),
-                        _ => None,
+                    .map(|item| match item {
+                        IpAddress::Ipv4(v4) => *v4,
                     })
+                    .next()
                     .ok_or(dns::Error::Failed)
             })
     }

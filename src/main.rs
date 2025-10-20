@@ -14,15 +14,14 @@ use esp_alloc::heap_allocator;
 use esp_backtrace as _;
 use esp_hal::{
     i2c::master::{Config, I2c},
-    interrupt::{software::SoftwareInterruptControl, Priority},
-    system::{CpuControl, Stack},
+    rng::Rng,
     time::Rate,
     timer::timg::TimerGroup,
     Blocking,
 };
-use esp_hal_embassy::{main, InterruptExecutor};
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
 use esp_println::{logger::init_logger, println};
+use esp_rtos::main;
 use wifi_task::{connect_to_wifi, shutdown_wifi};
 
 mod clock;
@@ -60,6 +59,8 @@ pub(crate) trait ClockfaceTrait {
     fn update(&mut self, fb: &mut FBType) -> impl Future<Output = ()> + Send;
 }
 
+esp_bootloader_esp_idf::esp_app_desc!();
+
 #[main]
 async fn main(spawner: Spawner) {
     init_logger(log::LevelFilter::Info);
@@ -74,18 +75,14 @@ async fn main(spawner: Spawner) {
         .with_scl(peripherals.GPIO42)
         .with_sda(peripherals.GPIO41);
 
-    heap_allocator!(size: 72 * 1024);
+    heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 73744);
 
     let mut clock_buffs = ClockBuffs::default();
     let mut clock = Clock::<I2CType>::new(i2c);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let timg1 = TimerGroup::new(peripherals.TIMG1);
 
-    esp_hal_embassy::init([timg0.timer0, timg0.timer1]);
-
-    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    let software_interrupt = sw_ints.software_interrupt2;
+    esp_rtos::start(timg0.timer0);
 
     println!("init framebuffer exchange");
     static TX: FrameBufferExchange = FrameBufferExchange::new();
@@ -94,8 +91,8 @@ async fn main(spawner: Spawner) {
     println!("init framebuffers");
     let fb0 = mk_static!(FBType, FBType::new());
     let fb1 = mk_static!(FBType, FBType::new());
-    fb0.clear();
-    fb1.clear();
+    fb0.erase();
+    fb1.erase();
 
     let hub75_peripherals = Hub75Peripherals {
         lcd_cam: peripherals.LCD_CAM,
@@ -116,47 +113,17 @@ async fn main(spawner: Spawner) {
         latch: peripherals.GPIO33,
     };
 
-    // run hub75 and display on second core
-    let cpu1_fnctn = {
-        move || {
-            use esp_hal_embassy::Executor;
-            let hp_executor = mk_static!(
-                InterruptExecutor<2>,
-                InterruptExecutor::new(software_interrupt)
-            );
-            let high_pri_spawner = hp_executor.start(Priority::Priority3);
-
-            // hub75 runs as high priority task
-            high_pri_spawner
-                .spawn(hub75_task(hub75_peripherals, &RX, &TX, fb1))
-                .ok();
-
-            let lp_executor = mk_static!(Executor, Executor::new());
-            // display task runs as low priority task
-            lp_executor.run(|spawner| {
-                spawner.spawn(display_task(&TX, &RX, fb0)).ok();
-            });
-        }
-    };
-
-    let mut _cpu_control = CpuControl::new(peripherals.CPU_CTRL);
-    const DISPLAY_STACK_SIZE: usize = 8192;
-    let app_core_stack = mk_static!(Stack<DISPLAY_STACK_SIZE>, Stack::new());
-
-    #[allow(static_mut_refs)]
-    let _guard = _cpu_control
-        .start_app_core(app_core_stack, cpu1_fnctn)
+    spawner
+        .spawn(hub75_task(hub75_peripherals, &RX, &TX, fb1))
         .unwrap();
+    spawner.spawn(display_task(&TX, &RX, fb0)).unwrap();
 
-    let stack = connect_to_wifi(
-        peripherals.WIFI,
-        timg1.timer0,
-        peripherals.RADIO_CLK,
-        peripherals.RNG,
-        spawner,
-    )
-    .await
-    .expect("Failed to connect to WiFi");
+    let rng = Rng::new();
+    let seed = (rng.random() as u64) << 32 | rng.random() as u64;
+
+    let stack = connect_to_wifi(peripherals.WIFI, seed, spawner)
+        .await
+        .expect("Failed to connect to WiFi");
 
     if let Some(stack_config) = stack.config_v4() {
         println!("Client IP: {}", stack_config.address);

@@ -41,7 +41,6 @@ This project relies on several key Rust crates:
 - `embassy`: Asynchronous runtime for embedded systems
 - `esp-hub75`: High-performance HUB75 LED matrix driver with DMA support
 - `embedded-graphics`: 2D graphics library for embedded displays
-- `heapless`: Static data structures
 
 ## Building
 

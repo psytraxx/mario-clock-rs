@@ -1,17 +1,17 @@
-use core::str::FromStr;
 use embassy_executor::Spawner;
-use embassy_net::{Runner, Stack, StackResources};
+use embassy_net::{Config, DhcpConfig, Runner, Stack, StackResources};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use esp_hal::{
-    peripherals::{self, RNG},
-    rng::Rng,
-};
+use esp_hal::peripherals::{self};
 use esp_println::println;
-use esp_wifi::wifi::{
-    ClientConfiguration, Configuration, WifiController, WifiDevice, WifiError, WifiEvent, WifiState,
+use esp_radio::{
+    wifi::{
+        self, ClientConfig, ModeConfig, WifiController, WifiDevice, WifiError, WifiEvent,
+        WifiStaState,
+    },
+    Controller,
 };
-use heapless::String;
+
 use static_cell::StaticCell;
 
 /// Static cell for network stack resources
@@ -39,30 +39,24 @@ pub async fn shutdown_wifi() {
 
 pub async fn connect_to_wifi(
     wifi: peripherals::WIFI<'static>,
-    timer: esp_hal::timer::timg::Timer<'static>,
-    radio_clocks: peripherals::RADIO_CLK<'static>,
-    rng: RNG<'static>,
+    seed: u64,
     spawner: Spawner,
 ) -> Result<Stack<'static>, WifiError> {
-    let mut rng = Rng::new(rng);
+    static INIT: StaticCell<Controller<'static>> = StaticCell::new();
+    let init = INIT.init(esp_radio::init().unwrap());
 
-    static INIT: StaticCell<esp_wifi::EspWifiController<'static>> = StaticCell::new();
-    let init = INIT.init(esp_wifi::init(timer, rng, radio_clocks).unwrap());
-
-    let (controller, interfaces) = esp_wifi::wifi::new(init, wifi).unwrap();
+    let (controller, interfaces) = wifi::new(init, wifi, Default::default()).unwrap();
 
     let wifi_interface = interfaces.sta;
 
     // initialize network stack
-    let mut dhcp_config = embassy_net::DhcpConfig::default();
-    dhcp_config.hostname = Some(String::<32>::from_str("mario-clock-rs").unwrap());
+    let dhcp_config = DhcpConfig::default();
 
-    let seed = rng.random();
-    let config = embassy_net::Config::dhcpv4(dhcp_config);
+    let config = Config::dhcpv4(dhcp_config);
 
     println!("Initialize network stack");
     let stack_resources: &'static mut _ = STACK_RESOURCES.init(StackResources::new());
-    let (stack, runner) = embassy_net::new(wifi_interface, config, stack_resources, seed.into());
+    let (stack, runner) = embassy_net::new(wifi_interface, config, stack_resources, seed);
 
     spawner.spawn(connection(controller)).ok();
     spawner.spawn(net_task(runner)).ok();
@@ -121,7 +115,7 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
     });
 
     loop {
-        if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
+        if wifi::sta_state() == WifiStaState::Connected {
             // wait until we're no longer connected
             controller.wait_for_event(WifiEvent::StaDisconnected).await;
             Timer::after(Duration::from_millis(5000)).await
@@ -131,12 +125,12 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
             let ssid = env!("WIFI_SSID").try_into().unwrap();
             let password = env!("WIFI_PSK").try_into().unwrap();
             println!("Connecting to wifi with SSID: {}", ssid);
-            let client_config = Configuration::Client(ClientConfiguration {
-                ssid,
-                password,
-                ..Default::default()
-            });
-            controller.set_configuration(&client_config)?;
+            let client_config = ModeConfig::Client(
+                ClientConfig::default()
+                    .with_ssid(ssid)
+                    .with_password(password),
+            );
+            controller.set_config(&client_config)?;
             println!("Starting WiFi controller");
             controller.start_async().await?;
             println!("WiFi controller started");

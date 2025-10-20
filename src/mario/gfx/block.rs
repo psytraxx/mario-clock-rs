@@ -4,12 +4,11 @@ use crate::{
     engine::{millis, Direction, Event, Sprite}, // Added SpriteInfo
     FBType,
 };
-use alloc::format;
+use alloc::{format, string::String};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
 };
-use heapless::String;
 
 // --- Constants ---
 const MOVE_PACE: i32 = 2; // Pixels the block moves per animation frame when hit
@@ -38,7 +37,7 @@ pub(crate) struct Block {
     last_animation_millis: u64, // Timestamp of the last animation update
 
     // Displayed Text
-    text: String<2>, // Stores the 2-digit text displayed on the block
+    text: String, // Stores the 2-digit text displayed on the block
 
     // Event Handling (Pub/Sub)
     rx: Option<Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
@@ -68,7 +67,7 @@ impl Block {
         self.text.clear();
         // Ensure text is exactly 2 chars, padding if necessary (optional)
         // For now, assumes input is correct length or truncation is okay.
-        self.text.push_str(text).unwrap_or_default();
+        self.text.push_str(text);
     }
 
     /// Sets the block's state to Idle and resets its position.
