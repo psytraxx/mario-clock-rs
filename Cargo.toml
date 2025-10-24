@@ -50,6 +50,7 @@ esp-radio = { version = "0.16.0", features = [
 
 embassy-sync = { version = "0.7.2", features = [] }
 static_cell = "2.1.1"
+heapless = "0.8.0"
 esp-hub75 = { version = "0.7.0", features = ["esp32s3", "log"] }
 embedded-graphics = { version = "0.8.1", features = [] }
 embedded-hal = { version = "1.0.0", features = [] }
