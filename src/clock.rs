@@ -85,11 +85,10 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         let addr = V4(SocketAddrV4::new(addr, 123));
 
         // Send NTP request with error handling
-        let socket_ref = self.socket.as_ref()
-            .ok_or_else(|| {
-                println!("ERROR: Socket not initialized");
-                dns::Error::Failed
-            })?;
+        let socket_ref = self.socket.as_ref().ok_or_else(|| {
+            println!("ERROR: Socket not initialized");
+            dns::Error::Failed
+        })?;
 
         let req = match sntp_send_request(addr, socket_ref, context).await {
             Ok(r) => r,
@@ -100,11 +99,10 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         };
 
         // Process NTP response
-        let socket_ref = self.socket.as_ref()
-            .ok_or_else(|| {
-                println!("ERROR: Socket not initialized");
-                dns::Error::Failed
-            })?;
+        let socket_ref = self.socket.as_ref().ok_or_else(|| {
+            println!("ERROR: Socket not initialized");
+            dns::Error::Failed
+        })?;
 
         if let Ok(response) = sntp_process_response(addr, socket_ref, context, req).await {
             println!("received NTP response: {:?}", response);
@@ -226,13 +224,10 @@ impl TimeStampGen {
 impl NtpTimestampGenerator for TimeStampGen {
     fn init(&mut self) {
         // Convert with saturating behavior if overflow occurs
-        let stamp: i64 = Instant::now()
-            .as_micros()
-            .try_into()
-            .unwrap_or_else(|_| {
-                println!("Warning: Timestamp overflow in NTP generator");
-                i64::MAX
-            });
+        let stamp: i64 = Instant::now().as_micros().try_into().unwrap_or_else(|_| {
+            println!("Warning: Timestamp overflow in NTP generator");
+            i64::MAX
+        });
         self.val = self.val.saturating_add(stamp);
     }
 

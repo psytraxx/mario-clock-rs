@@ -73,11 +73,11 @@ impl Block {
         if value <= 99 {
             // Format with leading zero, using core::fmt::Write
             // This writes directly to the stack-allocated String buffer
-            write!(&mut self.text, "{:02}", value)
-                .expect("Format failed - buffer too small");
+            write!(&mut self.text, "{:02}", value).expect("Format failed - buffer too small");
         } else {
             // Value out of range
-            self.text.push_str("??")
+            self.text
+                .push_str("??")
                 .expect("Push failed - buffer too small");
         }
     }

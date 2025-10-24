@@ -77,7 +77,9 @@ async fn main(spawner: Spawner) {
 
     // Initialize I2C with error handling
     let i2c = match I2c::new(peripherals.I2C0, config) {
-        Ok(i2c) => i2c.with_scl(peripherals.GPIO42).with_sda(peripherals.GPIO41),
+        Ok(i2c) => i2c
+            .with_scl(peripherals.GPIO42)
+            .with_sda(peripherals.GPIO41),
         Err(e) => {
             println!("FATAL ERROR: Unable to create I2C instance: {:?}", e);
             println!("Cannot continue without I2C for RTC");
