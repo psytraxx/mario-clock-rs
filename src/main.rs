@@ -154,30 +154,41 @@ async fn main(spawner: Spawner) {
     let rng = Rng::new();
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
-    let stack = connect_to_wifi(peripherals.WIFI, seed, spawner)
-        .await
-        .expect("Failed to connect to WiFi");
+    // WiFi is used only for initial NTP time synchronization
+    // This is a one-shot operation to minimize power consumption
+    {
+        let stack = connect_to_wifi(peripherals.WIFI, seed, spawner)
+            .await
+            .expect("Failed to connect to WiFi");
 
-    if let Some(stack_config) = stack.config_v4() {
-        println!("Client IP: {}", stack_config.address);
-    } else {
-        println!("Failed to get stack config");
+        if let Some(stack_config) = stack.config_v4() {
+            println!("Client IP: {}", stack_config.address);
+        } else {
+            println!("Failed to get stack config");
+        }
+
+        clock
+            .sync_ntp(stack, &mut clock_buffs)
+            .await
+            .expect("Failed to sync NTP");
+
+        let time = Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich);
+        println!("Current time: {}", time);
+
+        println!("Shutting down WiFi and network stack");
+
+        // Properly shutdown WiFi
+        shutdown_wifi().await;
+
+        // Stack is dropped here, freeing network resources
+        // RTC maintains time accuracy between reboots
     }
-    clock
-        .sync_ntp(stack, &mut clock_buffs)
-        .await
-        .expect("Failed to sync NTP");
 
-    let time = Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich);
-    println!("Current time: {}", time);
-
-    println!("Shutting down WiFi and network stack");
-
-    // Properly shutdown WiFi
-    shutdown_wifi().await;
+    println!("WiFi resources released. Running clock from RTC.");
 
     loop {
-        // The main task keeps running so the executor doesn't exit
-        Timer::after(Duration::from_secs(1)).await;
+        // Main task keeps running to prevent executor exit
+        // Display continues on Core 1 independently
+        Timer::after(Duration::from_secs(60)).await;
     }
 }
