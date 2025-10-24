@@ -67,7 +67,12 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             &mut buffs.tx_meta,
             &mut buffs.tx_buffer,
         );
-        socket.bind(123).unwrap();
+
+        // Bind socket with error handling
+        if let Err(e) = socket.bind(123) {
+            println!("Failed to bind UDP socket to port 123: {:?}", e);
+            return Err(dns::Error::Failed);
+        }
 
         let addr: Ipv4Address = self.dns_query(&stack, "pool.ntp.org").await?;
 
@@ -79,18 +84,35 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         println!("getting time from {}", addr);
         let addr = V4(SocketAddrV4::new(addr, 123));
 
-        let req = sntp_send_request(addr, self.socket.as_ref().unwrap(), context)
-            .await
-            .unwrap();
+        // Send NTP request with error handling
+        let socket_ref = self.socket.as_ref()
+            .ok_or_else(|| {
+                println!("ERROR: Socket not initialized");
+                dns::Error::Failed
+            })?;
 
-        if let Ok(response) =
-            sntp_process_response(addr, self.socket.as_ref().unwrap(), context, req).await
-        {
+        let req = match sntp_send_request(addr, socket_ref, context).await {
+            Ok(r) => r,
+            Err(e) => {
+                println!("Failed to send NTP request: {:?}", e);
+                return Err(dns::Error::Failed);
+            }
+        };
+
+        // Process NTP response
+        let socket_ref = self.socket.as_ref()
+            .ok_or_else(|| {
+                println!("ERROR: Socket not initialized");
+                dns::Error::Failed
+            })?;
+
+        if let Ok(response) = sntp_process_response(addr, socket_ref, context, req).await {
             println!("received NTP response: {:?}", response);
             TIME_OFFSET_SECONDS.store(response.seconds, Ordering::Relaxed);
             self.set_rtc();
         } else {
             println!("Failed to process NTP response");
+            return Err(dns::Error::Failed);
         }
 
         Ok(())
@@ -100,11 +122,24 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         let instant_seconds = Instant::now().as_secs();
         let offset_seconds: u64 = TIME_OFFSET_SECONDS.load(Ordering::Relaxed) as u64;
         let time_seconds = instant_seconds + offset_seconds;
-        DateTime::from_timestamp(
-            time_seconds.try_into().expect("Unable to convert to i64"),
-            0,
-        )
-        .unwrap()
+
+        // Convert with fallback to epoch if conversion fails
+        let time_i64 = match time_seconds.try_into() {
+            Ok(t) => t,
+            Err(_) => {
+                println!("Warning: Time overflow, using epoch");
+                0i64
+            }
+        };
+
+        // Create timestamp with fallback to epoch
+        match DateTime::from_timestamp(time_i64, 0) {
+            Some(dt) => dt,
+            None => {
+                println!("Warning: Invalid timestamp, using epoch");
+                DateTime::UNIX_EPOCH
+            }
+        }
     }
 
     pub fn get_time_in_zone(zone: chrono_tz::Tz) -> DateTime<chrono_tz::Tz> {
@@ -119,10 +154,16 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         let minute = datetime.minutes as u32;
         let second = datetime.seconds as u32;
 
-        // Use chrono to create a DateTime object
-        let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)
+        // Use chrono to create a DateTime object with error handling
+        let naive = match chrono::NaiveDate::from_ymd_opt(year, month, day)
             .and_then(|date| date.and_hms_opt(hour, minute, second))
-            .expect("Failed to create NaiveDateTime");
+        {
+            Some(dt) => dt,
+            None => {
+                println!("Warning: Invalid RTC date/time, using epoch");
+                return 0; // Return Unix epoch
+            }
+        };
 
         // Convert to DateTime<Utc>
         let datetime_utc: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, chrono::Utc);
@@ -132,7 +173,16 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
 
     fn set_rtc(&mut self) {
         let time_seconds = TIME_OFFSET_SECONDS.load(Ordering::Relaxed);
-        let t = DateTime::<Utc>::from_timestamp(time_seconds as i64, 0).unwrap();
+
+        // Convert timestamp with error handling
+        let t = match DateTime::<Utc>::from_timestamp(time_seconds as i64, 0) {
+            Some(dt) => dt,
+            None => {
+                println!("ERROR: Invalid timestamp, cannot set RTC");
+                return;
+            }
+        };
+
         // Set RTC time
         if let Err(e) = self.rtc.set_datetime(&pcf8563::DateTime {
             hours: t.hour() as u8,
@@ -175,15 +225,34 @@ impl TimeStampGen {
 
 impl NtpTimestampGenerator for TimeStampGen {
     fn init(&mut self) {
-        let stamp: i64 = Instant::now().as_micros().try_into().unwrap();
-        self.val += stamp;
+        // Convert with saturating behavior if overflow occurs
+        let stamp: i64 = Instant::now()
+            .as_micros()
+            .try_into()
+            .unwrap_or_else(|_| {
+                println!("Warning: Timestamp overflow in NTP generator");
+                i64::MAX
+            });
+        self.val = self.val.saturating_add(stamp);
     }
 
     fn timestamp_sec(&self) -> u64 {
-        (self.val.div_euclid(1_000_000)).try_into().unwrap()
+        // Saturate to max value if conversion fails
+        (self.val.div_euclid(1_000_000))
+            .try_into()
+            .unwrap_or_else(|_| {
+                println!("Warning: Timestamp seconds overflow");
+                u64::MAX
+            })
     }
 
     fn timestamp_subsec_micros(&self) -> u32 {
-        (self.val.rem_euclid(1_000_000)).try_into().unwrap()
+        // Saturate to max value if conversion fails
+        (self.val.rem_euclid(1_000_000))
+            .try_into()
+            .unwrap_or_else(|_| {
+                println!("Warning: Timestamp microseconds overflow");
+                u32::MAX
+            })
     }
 }
