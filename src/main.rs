@@ -10,6 +10,7 @@ use display::{
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
+use esp_alloc::heap_allocator;
 use esp_backtrace as _;
 use esp_hal::{
     gpio::Pin,
@@ -36,7 +37,7 @@ extern crate alloc;
 
 const ROWS: usize = 64;
 const COLS: usize = 64;
-const BITS: u8 = 4;
+const BITS: u8 = 3;
 const NROWS: usize = compute_rows(ROWS);
 const FRAME_COUNT: usize = compute_frame_count(BITS);
 
@@ -65,6 +66,8 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
+    heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 73744);
+
     init_logger(log::LevelFilter::Info);
 
     let peripherals = esp_hal::init(esp_hal::Config::default());
@@ -101,12 +104,10 @@ async fn main(spawner: Spawner) {
     static TX: FrameBufferExchange = FrameBufferExchange::new();
     static RX: FrameBufferExchange = FrameBufferExchange::new();
 
-    println!("init framebuffers");
+    println!("init framebuffer 0");
     let fb0 = mk_static!(FBType, FBType::new());
+    println!("Framebuffer 0 initialized");
     let fb1 = mk_static!(FBType, FBType::new());
-
-    info!("fb0: {:?}", fb0);
-    info!("fb1: {:?}", fb1);
 
     let hub75_peripherals = Hub75Peripherals {
         lcd_cam: peripherals.LCD_CAM,
@@ -126,6 +127,8 @@ async fn main(spawner: Spawner) {
         clock: peripherals.GPIO34.degrade(),
         latch: peripherals.GPIO33.degrade(),
     };
+
+    println!("Starting second core for display task");
 
     // run hub75 and display on second core
     let cpu1_fnctn = {
@@ -215,6 +218,7 @@ async fn main(spawner: Spawner) {
     println!("WiFi resources released. Running clock from RTC.");
 
     loop {
+        info!("Starting clock update cycle");
         // Main task keeps running to prevent executor exit
         // Display continues on Core 1 independently
         Timer::after(Duration::from_secs(60)).await;
