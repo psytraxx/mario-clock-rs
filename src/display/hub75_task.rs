@@ -3,11 +3,8 @@ use core::sync::atomic::Ordering;
 use embassy_executor::task;
 use embassy_time::{Duration, Instant};
 use esp_hal::{
-    gpio::Pin,
-    peripherals::{
-        DMA_CH0, GPIO10, GPIO11, GPIO2, GPIO21, GPIO3, GPIO33, GPIO34, GPIO35, GPIO36, GPIO37,
-        GPIO38, GPIO39, GPIO6, GPIO7, LCD_CAM,
-    },
+    gpio::{AnyPin, Pin},
+    peripherals::{DMA_CH0, LCD_CAM},
     system::Cpu,
     time::Rate,
 };
@@ -18,35 +15,35 @@ use crate::{FBType, FrameBufferExchange, REFRESH_RATE};
 
 type Hub75Type = Hub75<'static, esp_hal::Async>;
 
-pub(crate) struct Hub75Peripherals {
-    pub lcd_cam: LCD_CAM<'static>,
-    pub dma_channel: DMA_CH0<'static>,
-    pub red1: GPIO2<'static>,
-    pub grn1: GPIO6<'static>,
-    pub blu1: GPIO10<'static>,
-    pub red2: GPIO3<'static>,
-    pub grn2: GPIO7<'static>,
-    pub blu2: GPIO11<'static>,
-    pub addr0: GPIO39<'static>,
-    pub addr1: GPIO38<'static>,
-    pub addr2: GPIO37<'static>,
-    pub addr3: GPIO36<'static>,
-    pub addr4: GPIO21<'static>,
-    pub blank: GPIO35<'static>,
-    pub clock: GPIO34<'static>,
-    pub latch: GPIO33<'static>,
+pub(crate) struct Hub75Peripherals<'a> {
+    pub lcd_cam: LCD_CAM<'a>,
+    pub dma_channel: DMA_CH0<'a>,
+    pub red1: AnyPin<'a>,
+    pub grn1: AnyPin<'a>,
+    pub blu1: AnyPin<'a>,
+    pub red2: AnyPin<'a>,
+    pub grn2: AnyPin<'a>,
+    pub blu2: AnyPin<'a>,
+    pub addr0: AnyPin<'a>,
+    pub addr1: AnyPin<'a>,
+    pub addr2: AnyPin<'a>,
+    pub addr3: AnyPin<'a>,
+    pub addr4: AnyPin<'a>,
+    pub blank: AnyPin<'a>,
+    pub clock: AnyPin<'a>,
+    pub latch: AnyPin<'a>,
 }
 
 #[task]
 pub(crate) async fn hub75_task(
-    peripherals: Hub75Peripherals,
+    peripherals: Hub75Peripherals<'static>,
     rx: &'static FrameBufferExchange,
     tx: &'static FrameBufferExchange,
     fb: &'static mut FBType,
 ) {
     println!("Starting hub75_task() on core {}", Cpu::current() as usize);
     let channel = peripherals.dma_channel;
-    let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, size_of::<FBType>());
+    let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, FBType::dma_buffer_size_bytes());
 
     let pins = Hub75Pins16 {
         red1: peripherals.red1.degrade(),

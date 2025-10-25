@@ -22,6 +22,8 @@ _Hardware setup with ESP32-S3 and HUB75 matrix_
 - High-performance display updates using DMA transfers via esp-hub75 driver
 - Modern Rust async/await programming model
 - Efficient framebuffer updates through Embassy channels
+- Power-efficient design: WiFi used only for initial NTP sync, then disabled
+- Time maintained via RTC (PCF8563) for accuracy between reboots
 
 ## TODO
 
@@ -41,7 +43,6 @@ This project relies on several key Rust crates:
 - `embassy`: Asynchronous runtime for embedded systems
 - `esp-hub75`: High-performance HUB75 LED matrix driver with DMA support
 - `embedded-graphics`: 2D graphics library for embedded displays
-- `heapless`: Static data structures
 
 ## Building
 
@@ -91,6 +92,52 @@ espflash flash --monitor /dev/ttyUSB0 target/xtensa-esp32s3-none-elf/release/mar
     - `mario.rs` - Mario sprite implementation
 
 Each component is designed to work independently, communicating through Embassy channels and signals. The display system uses a double-buffering approach with DMA transfers for smooth updates, while the clock logic runs on a separate core to ensure consistent timing.
+
+## Architecture & Design Decisions
+
+### Time Management Strategy
+
+This project uses a **one-shot NTP synchronization** approach optimized for power efficiency:
+
+1. **Startup Phase:**
+   - WiFi is enabled and connects to the configured network
+   - NTP client synchronizes with `pool.ntp.org`
+   - Current time is written to the RTC (PCF8563) via I2C
+   - WiFi is immediately shutdown and resources are freed
+
+2. **Runtime Phase:**
+   - Time is maintained by the RTC chip (battery-backed)
+   - No WiFi active = lower power consumption
+   - Time persists across device reboots
+   - RTC drift is typically < 5 seconds/month
+
+**Why not continuous WiFi?**
+- **Power efficiency**: WiFi consumes ~160mA when active vs <1mA when off
+- **Simplicity**: No need to handle reconnections or network failures during operation
+- **Reliability**: RTC provides accurate time even if WiFi is unavailable
+
+**When to re-sync:**
+- Manual device reset
+- Significant time drift noticed (months of continuous operation)
+- Could be extended to periodic sync (daily/weekly) if power budget allows
+
+### Dual-Core Architecture
+
+The ESP32-S3's dual cores are utilized for maximum performance:
+
+**Core 0 (Protocol Core):**
+- Main application logic
+- WiFi and network stack
+- NTP synchronization
+- Minimal activity after startup
+
+**Core 1 (Application Core):**
+- High-priority: HUB75 display driver with DMA
+- Low-priority: Clock face rendering and sprite updates
+- Runs independently from Core 0
+- Ensures smooth 60+ FPS display refresh
+
+This separation ensures the display never stutters due to network operations.
 
 ## Contributing
 
