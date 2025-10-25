@@ -43,7 +43,7 @@ pub(crate) async fn hub75_task(
 ) {
     println!("Starting hub75_task() on core {}", Cpu::current() as usize);
     let channel = peripherals.dma_channel;
-    let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, size_of::<FBType>());
+    let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, FBType::dma_buffer_size_bytes());
 
     let pins = Hub75Pins16 {
         red1: peripherals.red1.degrade(),
@@ -67,7 +67,7 @@ pub(crate) async fn hub75_task(
         pins,
         channel,
         tx_descriptors,
-        Rate::from_mhz(20),
+        Rate::from_mhz(10),
     )
     .expect("failed to create Hub75!");
 
