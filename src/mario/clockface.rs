@@ -22,7 +22,7 @@ static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4
     StaticCell::new();
 
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 12; // Move cloud every X update cycles
+const CLOUD_MOVE_INTERVAL: u32 = 20; // Move cloud every X update cycles
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
 const CLOUD1_WIDTH: usize = 24;
 const CLOUD1_HEIGHT: usize = 13;
@@ -95,11 +95,11 @@ impl Clockface {
             hour_block,
             minute_block,
             // Initial cloud positions
-            cloud1_x: 0,        // Start cloud1 near the left
-            cloud2_x: 51,       // Start cloud2 further right
-            frame_count: 0,     // Initialize frame counter
-            cloud1_seed,        // Store initial seed
-            cloud2_seed,        // Store initial seed for cloud2
+            cloud1_x: 0,    // Start cloud1 near the left
+            cloud2_x: 51,   // Start cloud2 further right
+            frame_count: 0, // Initialize frame counter
+            cloud1_seed,    // Store initial seed
+            cloud2_seed,    // Store initial seed for cloud2
         }
     }
 
@@ -111,7 +111,7 @@ impl Clockface {
     fn update_cloud_position(x: &mut i32, width: i32, frame_count: u32) -> bool {
         let mut wrapped = false;
         // Only move the cloud every CLOUD_MOVE_INTERVAL frames
-        if frame_count % CLOUD_MOVE_INTERVAL == 0 {
+        if frame_count.is_multiple_of(CLOUD_MOVE_INTERVAL) {
             *x -= CLOUD_PIXELS_PER_MOVE;
             // If the cloud is completely off the left edge
             if *x + width < 0 {
@@ -144,7 +144,7 @@ impl ClockfaceTrait for Clockface {
 
             let mut rng = SmallRng::seed_from_u64(self.cloud1_seed);
             let circles = rng.random_range(4..9); // More varied circle count
-            // Regenerate cloud data
+                                                  // Regenerate cloud data
             let cloud1_array =
                 generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, circles, self.cloud1_seed)
                     .expect("Failed to regenerate cloud1");
@@ -163,7 +163,7 @@ impl ClockfaceTrait for Clockface {
 
             let mut rng = SmallRng::seed_from_u64(self.cloud2_seed);
             let circles = rng.random_range(3..8); // More varied circle count
-            // Regenerate cloud data
+                                                  // Regenerate cloud data
             let cloud2_array =
                 generate_cloud(CLOUD2_WIDTH, CLOUD2_HEIGHT, circles, self.cloud2_seed)
                     .expect("Failed to regenerate cloud2");
