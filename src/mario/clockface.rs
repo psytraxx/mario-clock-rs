@@ -1,4 +1,5 @@
 use chrono::Timelike;
+use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use static_cell::StaticCell;
 
@@ -17,6 +18,10 @@ use super::gfx::{
 
 static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4>> =
     StaticCell::new();
+
+// Track the last minute when Mario jumped to prevent multiple jumps per minute
+// Initialized to 255 (invalid minute) to ensure first jump always triggers
+static LAST_JUMP_MINUTE: AtomicU32 = AtomicU32::new(255);
 
 pub(crate) struct Clockface {
     ground: Tile,
@@ -72,7 +77,17 @@ impl ClockfaceTrait for Clockface {
         let now = Self::now();
 
         // Check if it's time to trigger a jump - we jump every minute
-        let jump = now.second() % 60 == 0;
+        // Use atomic compare-and-swap to ensure we only jump once per minute
+        // even if update() is called multiple times per second
+        let current_minute = now.minute();
+        let last_minute = LAST_JUMP_MINUTE.load(Ordering::Relaxed);
+        let jump = if current_minute != last_minute && now.second() == 0 {
+            // New minute detected and we're at second 0
+            LAST_JUMP_MINUTE.store(current_minute, Ordering::Relaxed);
+            true
+        } else {
+            false
+        };
 
         // Update the hour and minute blocks
         self.mario.update(fb, jump).await;

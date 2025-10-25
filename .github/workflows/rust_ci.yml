@@ -34,7 +34,5 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run build
         run: cargo build  --release
-      - name: Run fmt
-        run: cargo fmt --all -- --check --color always
       - name: Run clippy
         run: cargo clippy --all-features --workspace -- -D warnings

@@ -1,10 +1,10 @@
 use super::assets::{BLACK, BLOCK};
 use crate::{
     display::{draw_rgb_bitmap, print_text},
-    engine::{millis, Direction, Event, Sprite}, // Added SpriteInfo
+    engine::{millis, Direction, Event, Sprite},
     FBType,
 };
-use alloc::format;
+use core::fmt::Write;
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     pubsub::{Publisher, Subscriber},
@@ -37,8 +37,8 @@ pub(crate) struct Block {
     start_y: i32,         // Original Y position, used to return after animation
     last_animation_millis: u64, // Timestamp of the last animation update
 
-    // Displayed Text
-    text: String<2>, // Stores the 2-digit text displayed on the block
+    // Displayed Text (stack-allocated with heapless to avoid heap allocation)
+    text: String<4>, // Max 4 characters, stored on stack (zero heap usage)
 
     // Event Handling (Pub/Sub)
     rx: Option<Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>>,
@@ -57,18 +57,29 @@ impl Block {
             direction: Direction::Up, // Initial direction for hit animation
             start_y: y,               // Store the initial Y position
             last_animation_millis: 0,
-            text: String::new(), // Initialize empty text
+            text: String::new(), // Initialize empty (stack-allocated, no heap)
             rx: None,
             tx: None,
         }
     }
 
-    /// Sets the text to be displayed on the block (expects a 2-character string).
-    pub fn set_text(&mut self, text: &str) {
+    /// Formats a u32 value to 2-digit text without heap allocation
+    /// Uses heapless::String for ergonomic API with zero heap usage
+    /// Values 0-99 are displayed as "00"-"99"
+    /// Values >= 100 are displayed as "??"
+    fn set_text_from_u32(&mut self, value: u32) {
         self.text.clear();
-        // Ensure text is exactly 2 chars, padding if necessary (optional)
-        // For now, assumes input is correct length or truncation is okay.
-        self.text.push_str(text).unwrap_or_default();
+
+        if value <= 99 {
+            // Format with leading zero, using core::fmt::Write
+            // This writes directly to the stack-allocated String buffer
+            write!(&mut self.text, "{:02}", value).expect("Format failed - buffer too small");
+        } else {
+            // Value out of range
+            self.text
+                .push_str("??")
+                .expect("Push failed - buffer too small");
+        }
     }
 
     /// Sets the block's state to Idle and resets its position.
@@ -97,7 +108,9 @@ impl Block {
             self.x + 2 // Approx center for 2 chars
         };
         let text_y = self.y + 12; // Approx vertical center
-        print_text(fb, &self.text, text_x, text_y, BLACK);
+
+        // heapless::String implements AsRef<str>, so we can pass it directly
+        print_text(fb, self.text.as_str(), text_x, text_y, BLACK);
     }
 
     /// Updates the block's state, position, and draws it.
@@ -126,9 +139,8 @@ impl Block {
         }
 
         // --- 2. Update Displayed Text ---
-        // Format the current value (e.g., hour/minute) with leading zero
-        let formatted_text = format!("{current_value:02}");
-        self.set_text(formatted_text.as_str());
+        // Convert value to 2-digit text without heap allocation
+        self.set_text_from_u32(current_value);
 
         // --- 3. Update State and Position (Animation Logic) ---
         match self.state {

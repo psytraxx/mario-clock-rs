@@ -1,17 +1,17 @@
-use core::str::FromStr;
 use embassy_executor::Spawner;
-use embassy_net::{Runner, Stack, StackResources};
+use embassy_net::{Config, DhcpConfig, Runner, Stack, StackResources};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use esp_hal::{
-    peripherals::{self, RNG},
-    rng::Rng,
-};
+use esp_hal::peripherals::{self};
 use esp_println::println;
-use esp_wifi::wifi::{
-    ClientConfiguration, Configuration, WifiController, WifiDevice, WifiError, WifiEvent, WifiState,
+use esp_radio::{
+    wifi::{
+        self, ClientConfig, ModeConfig, WifiController, WifiDevice, WifiError, WifiEvent,
+        WifiStaState,
+    },
+    Controller,
 };
-use heapless::String;
+
 use static_cell::StaticCell;
 
 /// Static cell for network stack resources
@@ -39,47 +39,68 @@ pub async fn shutdown_wifi() {
 
 pub async fn connect_to_wifi(
     wifi: peripherals::WIFI<'static>,
-    timer: esp_hal::timer::timg::Timer<'static>,
-    radio_clocks: peripherals::RADIO_CLK<'static>,
-    rng: RNG<'static>,
+    seed: u64,
     spawner: Spawner,
 ) -> Result<Stack<'static>, WifiError> {
-    let mut rng = Rng::new(rng);
+    static INIT: StaticCell<Controller<'static>> = StaticCell::new();
 
-    static INIT: StaticCell<esp_wifi::EspWifiController<'static>> = StaticCell::new();
-    let init = INIT.init(esp_wifi::init(timer, rng, radio_clocks).unwrap());
+    // Initialize radio with error handling
+    let init = match esp_radio::init() {
+        Ok(radio) => INIT.init(radio),
+        Err(e) => {
+            println!("Failed to initialize radio: {:?}", e);
+            return Err(WifiError::NotInitialized);
+        }
+    };
 
-    let (controller, interfaces) = esp_wifi::wifi::new(init, wifi).unwrap();
+    // Create WiFi controller with error handling
+    let (controller, interfaces) = match wifi::new(init, wifi, Default::default()) {
+        Ok(result) => result,
+        Err(e) => {
+            println!("Failed to create WiFi controller: {:?}", e);
+            return Err(e);
+        }
+    };
 
     let wifi_interface = interfaces.sta;
 
     // initialize network stack
-    let mut dhcp_config = embassy_net::DhcpConfig::default();
-    dhcp_config.hostname = Some(String::<32>::from_str("mario-clock-rs").unwrap());
-
-    let seed = rng.random();
-    let config = embassy_net::Config::dhcpv4(dhcp_config);
+    let dhcp_config = DhcpConfig::default();
+    let config = Config::dhcpv4(dhcp_config);
 
     println!("Initialize network stack");
     let stack_resources: &'static mut _ = STACK_RESOURCES.init(StackResources::new());
-    let (stack, runner) = embassy_net::new(wifi_interface, config, stack_resources, seed.into());
+    let (stack, runner) = embassy_net::new(wifi_interface, config, stack_resources, seed);
 
     spawner.spawn(connection(controller)).ok();
     spawner.spawn(net_task(runner)).ok();
 
-    println!("Wait for network link");
+    println!("Wait for network link (timeout: 30s)");
+    let link_timeout = Duration::from_secs(30);
+    let start = embassy_time::Instant::now();
+
     loop {
         if stack.is_link_up() {
             break;
         }
+        if start.elapsed() > link_timeout {
+            println!("ERROR: Timeout waiting for network link");
+            return Err(WifiError::Disconnected);
+        }
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    println!("Wait for IP address");
+    println!("Wait for IP address (timeout: 30s)");
+    let ip_start = embassy_time::Instant::now();
+
     loop {
         if let Some(config) = stack.config_v4() {
             println!("Connected to WiFi with IP address {}", config.address);
             break;
+        }
+        if ip_start.elapsed() > link_timeout {
+            println!("ERROR: Timeout waiting for IP address");
+            return Err(WifiError::Disconnected);
         }
         Timer::after(Duration::from_millis(500)).await;
     }
@@ -115,28 +136,53 @@ async fn connection(controller: WifiController<'static>) {
 
 async fn connection_fallible(mut controller: WifiController<'static>) -> Result<(), WifiError> {
     println!("Start connection task, device capabilities:");
-    let caps = controller.capabilities().unwrap();
-    caps.iter().for_each(|o| {
-        println!("{:?}", o);
-    });
+
+    // Get capabilities with error handling
+    match controller.capabilities() {
+        Ok(caps) => {
+            caps.iter().for_each(|o| {
+                println!("{:?}", o);
+            });
+        }
+        Err(e) => {
+            println!("Warning: Could not get WiFi capabilities: {:?}", e);
+            // Continue anyway - not critical
+        }
+    }
 
     loop {
-        if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
+        if wifi::sta_state() == WifiStaState::Connected {
             // wait until we're no longer connected
             controller.wait_for_event(WifiEvent::StaDisconnected).await;
             Timer::after(Duration::from_millis(5000)).await
         }
 
         if !matches!(controller.is_started(), Ok(true)) {
-            let ssid = env!("WIFI_SSID").try_into().unwrap();
-            let password = env!("WIFI_PSK").try_into().unwrap();
+            // Convert SSID with error handling
+            let ssid = match env!("WIFI_SSID").try_into() {
+                Ok(s) => s,
+                Err(_) => {
+                    println!("ERROR: WIFI_SSID is invalid or too long (max 32 chars)");
+                    return Err(WifiError::InvalidArguments);
+                }
+            };
+
+            // Convert password with error handling
+            let password = match env!("WIFI_PSK").try_into() {
+                Ok(p) => p,
+                Err(_) => {
+                    println!("ERROR: WIFI_PSK is invalid or too long (max 64 chars)");
+                    return Err(WifiError::InvalidArguments);
+                }
+            };
+
             println!("Connecting to wifi with SSID: {}", ssid);
-            let client_config = Configuration::Client(ClientConfiguration {
-                ssid,
-                password,
-                ..Default::default()
-            });
-            controller.set_configuration(&client_config)?;
+            let client_config = ModeConfig::Client(
+                ClientConfig::default()
+                    .with_ssid(ssid)
+                    .with_password(password),
+            );
+            controller.set_config(&client_config)?;
             println!("Starting WiFi controller");
             controller.start_async().await?;
             println!("WiFi controller started");
