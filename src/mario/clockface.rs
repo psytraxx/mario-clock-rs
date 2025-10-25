@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::gfx::{
-    assets::{BUSH, CLOUD2, GROUND, HILL, SKY_COLOR},
+    assets::{BUSH, GROUND, HILL, SKY_COLOR},
     block::Block,
     generate_cloud,
     mario::Mario,
@@ -22,11 +22,14 @@ static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4
     StaticCell::new();
 
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 5; // Move cloud every X update cycles
+const CLOUD_MOVE_INTERVAL: u32 = 12; // Move cloud every X update cycles
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
 const CLOUD1_WIDTH: usize = 24;
 const CLOUD1_HEIGHT: usize = 13;
+const CLOUD2_WIDTH: usize = 16;
+const CLOUD2_HEIGHT: usize = 13;
 const INITIAL_CLOUD1_SEED: u64 = 1; // Define initial seed
+const INITIAL_CLOUD2_SEED: u64 = 2; // Define initial seed for cloud2
 
 // Track the last minute when Mario jumped to prevent multiple jumps per minute
 // Initialized to 255 (invalid minute) to ensure first jump always triggers
@@ -46,8 +49,9 @@ pub(crate) struct Clockface {
     cloud2_x: i32,
     // Frame counter for slow movement
     frame_count: u32,
-    // Seed for cloud1 generation
+    // Seeds for cloud generation
     cloud1_seed: u64,
+    cloud2_seed: u64,
 }
 
 impl Clockface {
@@ -63,10 +67,15 @@ impl Clockface {
         let mut minute_block = Block::new(32, 8);
         minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
 
-        let initial_seed = INITIAL_CLOUD1_SEED;
-        let cloud1_array = generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, 3, initial_seed)
-            .expect("Failed to generate initial cloud");
+        let cloud1_seed = INITIAL_CLOUD1_SEED;
+        let cloud1_array = generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, 5, cloud1_seed)
+            .expect("Failed to generate initial cloud1");
         let cloud1_size = CLOUD1_WIDTH * CLOUD1_HEIGHT;
+
+        let cloud2_seed = INITIAL_CLOUD2_SEED;
+        let cloud2_array = generate_cloud(CLOUD2_WIDTH, CLOUD2_HEIGHT, 5, cloud2_seed)
+            .expect("Failed to generate initial cloud2");
+        let cloud2_size = CLOUD2_WIDTH * CLOUD2_HEIGHT;
 
         Self {
             ground: Tile::new(GROUND, 8, 8),
@@ -76,16 +85,21 @@ impl Clockface {
                 CLOUD1_WIDTH as i32,
                 CLOUD1_HEIGHT as i32,
             ),
-            cloud2: Object::new(CLOUD2, 13, 12),
+            cloud2: Object::new(
+                &cloud2_array[0..cloud2_size],
+                CLOUD2_WIDTH as i32,
+                CLOUD2_HEIGHT as i32,
+            ),
             hill: Object::new(HILL, 20, 22),
             mario,
             hour_block,
             minute_block,
             // Initial cloud positions
-            cloud1_x: 0,               // Start cloud1 near the left
-            cloud2_x: 51,              // Start cloud2 further right
-            frame_count: 0,            // Initialize frame counter
-            cloud1_seed: initial_seed, // Store initial seed
+            cloud1_x: 0,        // Start cloud1 near the left
+            cloud2_x: 51,       // Start cloud2 further right
+            frame_count: 0,     // Initialize frame counter
+            cloud1_seed,        // Store initial seed
+            cloud2_seed,        // Store initial seed for cloud2
         }
     }
 
@@ -118,27 +132,47 @@ impl ClockfaceTrait for Clockface {
         // --- 1. Clear Background ---
         fill_rect(fb, 0, 0, ROWS as u32, COLS as u32, SKY_COLOR);
 
-        // --- 2. Update Cloud Positions & Regenerate cloud1 if needed ---
+        // --- 2. Update Cloud Positions & Regenerate clouds if needed ---
         let cloud1_wrapped =
             Self::update_cloud_position(&mut self.cloud1_x, CLOUD1_WIDTH as i32, self.frame_count);
-        Self::update_cloud_position(&mut self.cloud2_x, 24, self.frame_count);
+        let cloud2_wrapped =
+            Self::update_cloud_position(&mut self.cloud2_x, CLOUD2_WIDTH as i32, self.frame_count);
 
         if cloud1_wrapped {
             // Update seed - using frame_count ensures variety
             self.cloud1_seed = self.frame_count as u64;
 
             let mut rng = SmallRng::seed_from_u64(self.cloud1_seed);
-            let circles = rng.random_range(3..8);
+            let circles = rng.random_range(4..9); // More varied circle count
             // Regenerate cloud data
             let cloud1_array =
                 generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, circles, self.cloud1_seed)
-                    .expect("Failed to regenerate cloud");
+                    .expect("Failed to regenerate cloud1");
             let cloud1_size = CLOUD1_WIDTH * CLOUD1_HEIGHT;
             // Replace the cloud1 object with a new one containing the new data
             self.cloud1 = Object::new(
                 &cloud1_array[0..cloud1_size],
                 CLOUD1_WIDTH as i32,
                 CLOUD1_HEIGHT as i32,
+            );
+        }
+
+        if cloud2_wrapped {
+            // Update seed - using frame_count + offset ensures variety and difference from cloud1
+            self.cloud2_seed = self.frame_count as u64 + 1000;
+
+            let mut rng = SmallRng::seed_from_u64(self.cloud2_seed);
+            let circles = rng.random_range(3..8); // More varied circle count
+            // Regenerate cloud data
+            let cloud2_array =
+                generate_cloud(CLOUD2_WIDTH, CLOUD2_HEIGHT, circles, self.cloud2_seed)
+                    .expect("Failed to regenerate cloud2");
+            let cloud2_size = CLOUD2_WIDTH * CLOUD2_HEIGHT;
+            // Replace the cloud2 object with a new one containing the new data
+            self.cloud2 = Object::new(
+                &cloud2_array[0..cloud2_size],
+                CLOUD2_WIDTH as i32,
+                CLOUD2_HEIGHT as i32,
             );
         }
 
