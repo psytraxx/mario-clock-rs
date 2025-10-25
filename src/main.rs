@@ -46,11 +46,10 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 const ROWS: usize = 64;
 const COLS: usize = 64;
-const BITS: u8 = 3;
+const BITS: u8 = 4; // 3-bit with double buffering = smooth, no flicker
 const NROWS: usize = compute_rows(ROWS);
-const FRAME_COUNT: usize = compute_frame_count(BITS);
+const FRAME_COUNT: usize = compute_frame_count(2); // Use double buffering
 
-// Define the channel type for passing display data
 // Define a fixed-size buffer type for the display
 type FBType = DmaFrameBuffer<ROWS, COLS, NROWS, BITS, FRAME_COUNT>;
 type FrameBufferExchange = Signal<CriticalSectionRawMutex, &'static mut FBType>;
@@ -115,6 +114,7 @@ async fn main(spawner: Spawner) {
     let fb0 = mk_static!(FBType, FBType::new());
     println!("Framebuffer 0 initialized");
     let fb1 = mk_static!(FBType, FBType::new());
+    println!("Framebuffer 1 initialized");
 
     let hub75_peripherals = Hub75Peripherals {
         lcd_cam: peripherals.LCD_CAM,
