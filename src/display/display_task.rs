@@ -24,9 +24,9 @@ pub(crate) async fn display_task(
         // Update clock logic
         cf.update(fb).await;
 
-        let rate = REFRESH_RATE.load(Ordering::Relaxed);
+        let _rate = REFRESH_RATE.load(Ordering::Relaxed);
 
-        println!("Refresh: {:4}", rate);
+        //println!("Refresh: {:4}", rate);
 
         // send the frame buffer to be rendered
         tx.signal(fb);

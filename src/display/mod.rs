@@ -28,7 +28,7 @@ pub(crate) fn draw_rgb_bitmap(
     fb: &mut FBType,
     x: i32,
     y: i32,
-    image: &'static [u16],
+    image: &[u16],
     width: i32,
     height: i32,
 ) {
