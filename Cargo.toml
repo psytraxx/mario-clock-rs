@@ -51,12 +51,12 @@ esp-radio = { version = "0.17.0", features = [
 
 embassy-sync = { version = "0.7.2", features = [] }
 static_cell = "2.1.1"
-heapless = "0.9.1"
+heapless = "0.9.2"
 esp-hub75 = { version = "0.8.0", features = ["esp32s3", "log"] }
 embedded-graphics = { version = "0.8.1", features = [] }
 embedded-hal = { version = "1.0.0", features = [] }
 pcf8563 = { git = "https://github.com/invpt/pcf8563-rs.git", branch = "main" }
-sntpc = { version = "0.6.1", default-features = false, features = [
+sntpc = { version = "0.7.0", default-features = false, features = [
     "embassy-socket",
     "log",
 ] }
