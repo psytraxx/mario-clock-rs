@@ -47,7 +47,9 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
 
         if let Some(time) = datetime {
             let timestamp = Self::rtc_datetime_to_timestamp(time);
-            TIME_OFFSET_SECONDS.store(timestamp, Ordering::Relaxed);
+            let uptime_seconds = Instant::now().as_secs() as u32;
+            let boot_time_offset = timestamp.saturating_sub(uptime_seconds);
+            TIME_OFFSET_SECONDS.store(boot_time_offset, Ordering::Relaxed);
         } else {
             println!("Failed to read RTC time - you should call sync_ntp() - otherwise we are unable to determine the time");
         };
@@ -106,7 +108,9 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
 
         if let Ok(response) = sntp_process_response(addr, socket_ref, context, req).await {
             println!("received NTP response: {:?}", response);
-            TIME_OFFSET_SECONDS.store(response.seconds, Ordering::Relaxed);
+            let uptime_seconds = Instant::now().as_secs() as u32;
+            let boot_time_offset = response.seconds.saturating_sub(uptime_seconds);
+            TIME_OFFSET_SECONDS.store(boot_time_offset, Ordering::Relaxed);
             self.set_rtc();
         } else {
             println!("Failed to process NTP response");
