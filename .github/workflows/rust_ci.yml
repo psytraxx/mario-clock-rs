@@ -23,7 +23,7 @@ jobs:
       WIFI_PSK: password
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Setup Rust
         uses: esp-rs/xtensa-toolchain@v1.6
         with:
