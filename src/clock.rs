@@ -9,6 +9,7 @@ use embedded_hal::i2c::I2c;
 use esp_println::println;
 use pcf8563::PCF8563;
 use sntpc::{sntp_process_response, sntp_send_request, NtpContext, NtpTimestampGenerator};
+use sntpc_net_embassy::UdpSocketWrapper;
 
 static TIME_OFFSET_SECONDS: AtomicU32 = AtomicU32::new(0);
 
@@ -32,7 +33,7 @@ impl Default for ClockBuffs {
 
 pub struct Clock<'a, I2C: I2c> {
     rtc: PCF8563<I2C>,
-    socket: Option<UdpSocket<'a>>,
+    socket: Option<UdpSocketWrapper<'a>>,
 }
 
 impl<'a, I2C: I2c> Clock<'a, I2C> {
@@ -75,6 +76,8 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             println!("Failed to bind UDP socket to port 123: {:?}", e);
             return Err(dns::Error::Failed);
         }
+
+        let socket = UdpSocketWrapper::from(socket);
 
         let addr: Ipv4Address = self.dns_query(&stack, "pool.ntp.org").await?;
 

@@ -87,7 +87,6 @@ pub const BUSH: &[u16; 189] = &[
     0xBFE3,
 ];
 
-
 /// Generates cloud pixel data dynamically.
 ///
 /// # Arguments
