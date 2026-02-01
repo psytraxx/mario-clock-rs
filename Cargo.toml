@@ -22,7 +22,7 @@ esp-rtos = { version = "0.2.0", features = [
 esp-bootloader-esp-idf = { version = "0.4.0", features = ["esp32s3"] }
 log = "0.4.28"
 
-embassy-net = { version = "0.7.1", features = [
+embassy-net = { version = "0.8.0", features = [
     "dhcpv4",
     "log",
     "tcp",
@@ -56,17 +56,15 @@ esp-hub75 = { version = "0.8.0", features = ["esp32s3", "log"] }
 embedded-graphics = { version = "0.8.1", features = [] }
 embedded-hal = { version = "1.0.0", features = [] }
 pcf8563 = { git = "https://github.com/invpt/pcf8563-rs.git", branch = "main" }
-sntpc = { version = "0.7.0", default-features = false, features = [
-    "embassy-socket",
-    "log",
-] }
-chrono = { version = "0.4.42", default-features = false }
+sntpc = { version = "0.8.1", default-features = false, features = ["log"] }
+chrono = { version = "0.4.43", default-features = false }
 chrono-tz = { version = "0.10.4", default-features = false }
 micromath = { version = "2.1.0", default-features = false, features = [
     "num-traits",
 ] }
 embassy-futures = { version = "0.1.2", features = ["log"] }
 esp-phy = { version = "0.1.1", features = ["esp32s3", "log-04"] }
+sntpc-net-embassy = { version = "0.8.0", features = ["log"] }
 
 [profile.dev]
 # Rust debug is too slow.

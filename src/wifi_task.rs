@@ -6,8 +6,8 @@ use esp_hal::peripherals::{self};
 use esp_println::println;
 use esp_radio::{
     wifi::{
-        self, ClientConfig, ModeConfig, WifiController, WifiDevice, WifiError, WifiEvent,
-        WifiStaState,
+        self, ModeConfig, WifiController, WifiDevice, WifiError, WifiEvent,
+        WifiStaState, sta::StationConfig,
     },
     Controller,
 };
@@ -158,8 +158,8 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
         }
 
         if !matches!(controller.is_started(), Ok(true)) {
-            // Convert SSID with error handling
-            let ssid = match env!("WIFI_SSID").try_into() {
+            // Convert SSID with error handling (use SSID env like example)
+            let ssid = match env!("SSID").try_into() {
                 Ok(s) => s,
                 Err(_) => {
                     println!("ERROR: WIFI_SSID is invalid or too long (max 32 chars)");
@@ -167,8 +167,8 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
                 }
             };
 
-            // Convert password with error handling
-            let password = match env!("WIFI_PSK").try_into() {
+            // Convert password with error handling (use PASSWORD env like example)
+            let password = match env!("PASSWORD").try_into() {
                 Ok(p) => p,
                 Err(_) => {
                     println!("ERROR: WIFI_PSK is invalid or too long (max 64 chars)");
@@ -177,12 +177,12 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
             };
 
             println!("Connecting to wifi with SSID: {}", ssid);
-            let client_config = ModeConfig::Client(
-                ClientConfig::default()
+            let station_config = ModeConfig::Station(
+                StationConfig::default()
                     .with_ssid(ssid)
                     .with_password(password),
             );
-            controller.set_config(&client_config)?;
+            controller.set_config(&station_config)?;
             println!("Starting WiFi controller");
             controller.start_async().await?;
             println!("WiFi controller started");
