@@ -2,7 +2,7 @@ use embassy_executor::Spawner;
 use embassy_net::{Config, DhcpConfig, Runner, Stack, StackResources};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
-use esp_hal::peripherals::{self};
+use esp_hal::peripherals::WIFI;
 use esp_println::println;
 use esp_radio::{
     wifi::{
@@ -38,7 +38,7 @@ pub async fn shutdown_wifi() {
 }
 
 pub async fn connect_to_wifi(
-    wifi: peripherals::WIFI<'static>,
+    wifi: WIFI<'static>,
     seed: u64,
     spawner: Spawner,
 ) -> Result<Stack<'static>, WifiError> {
