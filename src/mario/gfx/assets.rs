@@ -10,7 +10,7 @@ pub const M_SHIRT: u16 = 0x7BCF;
 pub const M_HAIR: u16 = 0x0000;
 
 use micromath::F32Ext;
-use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
+use rand::{rngs::SmallRng, Rng, RngExt, SeedableRng};
 
 // Sprite data arrays
 pub const BLOCK: &[u16; 352] = &[
