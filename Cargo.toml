@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rand = { version = "0.9.2", default-features = false, features = [
+rand = { version = "0.10.0", default-features = false, features = [
     "log",
     "alloc",
-    "small_rng",
 ] }
 esp-hal = { version = "=1.0.0", features = ["esp32s3", "log-04", "unstable"] }
 
@@ -49,12 +48,12 @@ esp-radio = { version = "0.17.0", features = [
     "wifi",
 ] }
 
-embassy-sync = { version = "0.7.2", features = [] }
+embassy-sync = "0.7.2"
 static_cell = "2.1.1"
 heapless = "0.9.2"
 esp-hub75 = { version = "0.8.0", features = ["esp32s3", "log"] }
-embedded-graphics = { version = "0.8.1", features = [] }
-embedded-hal = { version = "1.0.0", features = [] }
+embedded-graphics = "0.8.2"
+embedded-hal = "1.0.0"
 pcf8563 = { git = "https://github.com/invpt/pcf8563-rs.git", branch = "main" }
 sntpc = { version = "0.8.1", default-features = false, features = ["log"] }
 chrono = { version = "0.4.43", default-features = false }

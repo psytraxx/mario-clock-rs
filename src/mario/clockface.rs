@@ -1,7 +1,7 @@
 use chrono::Timelike;
 use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{rngs::SmallRng, RngExt, SeedableRng};
 use static_cell::StaticCell;
 
 use crate::{
