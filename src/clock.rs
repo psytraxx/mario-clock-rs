@@ -3,12 +3,12 @@ use core::net::SocketAddr::V4;
 use core::net::SocketAddrV4;
 use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
-use embassy_net::{dns, IpAddress, Ipv4Address, Stack};
+use embassy_net::{IpAddress, Ipv4Address, Stack, dns};
 use embassy_time::Instant;
 use embedded_hal::i2c::I2c;
 use esp_println::println;
 use pcf8563::PCF8563;
-use sntpc::{sntp_process_response, sntp_send_request, NtpContext, NtpTimestampGenerator};
+use sntpc::{NtpContext, NtpTimestampGenerator, sntp_process_response, sntp_send_request};
 use sntpc_net_embassy::UdpSocketWrapper;
 
 static TIME_OFFSET_SECONDS: AtomicU32 = AtomicU32::new(0);
@@ -52,7 +52,9 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             let boot_time_offset = timestamp.saturating_sub(uptime_seconds);
             TIME_OFFSET_SECONDS.store(boot_time_offset, Ordering::Relaxed);
         } else {
-            println!("Failed to read RTC time - you should call sync_ntp() - otherwise we are unable to determine the time");
+            println!(
+                "Failed to read RTC time - you should call sync_ntp() - otherwise we are unable to determine the time"
+            );
         };
 
         Clock { rtc, socket: None }

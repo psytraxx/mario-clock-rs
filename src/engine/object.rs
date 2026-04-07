@@ -1,4 +1,4 @@
-use crate::{display::draw_rgb_bitmap, FBType};
+use crate::{FBType, display::draw_rgb_bitmap};
 use heapless::Vec;
 
 const MAX_SPRITE_SIZE: usize = 512;

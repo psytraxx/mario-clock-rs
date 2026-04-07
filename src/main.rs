@@ -10,7 +10,7 @@ use clock::{Clock, ClockBuffs};
 use core::{future::Future, sync::atomic::AtomicU32};
 use display::{
     display_task::display_task,
-    hub75_task::{hub75_task, Hub75Peripherals},
+    hub75_task::{Hub75Peripherals, hub75_task},
 };
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
@@ -18,13 +18,13 @@ use embassy_time::{Duration, Timer};
 use esp_alloc::heap_allocator;
 use esp_backtrace as _;
 use esp_hal::{
+    Blocking,
     gpio::Pin,
     i2c::master::{Config, I2c},
-    interrupt::{software::SoftwareInterruptControl, Priority},
+    interrupt::{Priority, software::SoftwareInterruptControl},
     rng::Rng,
     time::Rate,
     timer::timg::TimerGroup,
-    Blocking,
 };
 use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
 use esp_println::{logger::init_logger_from_env, println};

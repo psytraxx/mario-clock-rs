@@ -1,14 +1,14 @@
 use chrono::Timelike;
 use core::sync::atomic::{AtomicU32, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
-use rand::{rngs::SmallRng, RngExt, SeedableRng};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use static_cell::StaticCell;
 
 use crate::{
+    COLS, ClockfaceTrait, FBType, I2CType, ROWS,
     clock::Clock,
     display::fill_rect,
-    engine::{object::Object, tile::Tile, Event, Sprite},
-    ClockfaceTrait, FBType, I2CType, COLS, ROWS,
+    engine::{Event, Sprite, object::Object, tile::Tile},
 };
 
 use super::gfx::{
@@ -144,7 +144,7 @@ impl ClockfaceTrait for Clockface {
 
             let mut rng = SmallRng::seed_from_u64(self.cloud1_seed);
             let circles = rng.random_range(4..9); // More varied circle count
-                                                  // Regenerate cloud data
+            // Regenerate cloud data
             let cloud1_array =
                 generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, circles, self.cloud1_seed)
                     .expect("Failed to regenerate cloud1");
@@ -163,7 +163,7 @@ impl ClockfaceTrait for Clockface {
 
             let mut rng = SmallRng::seed_from_u64(self.cloud2_seed);
             let circles = rng.random_range(3..8); // More varied circle count
-                                                  // Regenerate cloud data
+            // Regenerate cloud data
             let cloud2_array =
                 generate_cloud(CLOUD2_WIDTH, CLOUD2_HEIGHT, circles, self.cloud2_seed)
                     .expect("Failed to regenerate cloud2");

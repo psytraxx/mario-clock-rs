@@ -5,11 +5,11 @@ use embassy_time::{Duration, Timer};
 use esp_hal::peripherals::WIFI;
 use esp_println::println;
 use esp_radio::{
+    Controller,
     wifi::{
         self, ClientConfig, ModeConfig, WifiController, WifiDevice, WifiError, WifiEvent,
         WifiStaState,
     },
-    Controller,
 };
 
 use static_cell::StaticCell;
@@ -110,7 +110,7 @@ pub async fn connect_to_wifi(
 
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
-    use embassy_futures::select::{select, Either};
+    use embassy_futures::select::{Either, select};
 
     match select(runner.run(), STOP_NET_SIGNAL.wait()).await {
         Either::First(_) => {

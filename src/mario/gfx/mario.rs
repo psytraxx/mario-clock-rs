@@ -1,7 +1,7 @@
 use crate::{
-    display::draw_rgb_bitmap,
-    engine::{millis, Direction, Event, Sprite},
     FBType,
+    display::draw_rgb_bitmap,
+    engine::{Direction, Event, Sprite, millis},
 };
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
@@ -96,18 +96,18 @@ impl Mario {
         let mut position_changed = false; // Track if position changes this frame
 
         // --- 1. Handle Incoming Events ---
-        if let Some(rx) = &mut self.rx {
-            if let Some(event) = rx.try_next_message_pure() {
-                match event {
-                    Event::Collision(t)
-                        if t.name != self.name()
-                            && self.state == State::Jumping
-                            && self.direction == Direction::Up =>
-                    {
-                        self.direction = Direction::Down;
-                    }
-                    _ => {}
+        if let Some(rx) = &mut self.rx
+            && let Some(event) = rx.try_next_message_pure()
+        {
+            match event {
+                Event::Collision(t)
+                    if t.name != self.name()
+                        && self.state == State::Jumping
+                        && self.direction == Direction::Up =>
+                {
+                    self.direction = Direction::Down;
                 }
+                _ => {}
             }
         }
 
@@ -142,7 +142,7 @@ impl Mario {
                     if self.direction == Direction::Down && (next_y + self.height) >= GROUND_Y {
                         self.set_idle_state();
                         next_y = self.y; // Use the Y set by set_idle_state
-                                         // Position effectively changed back to ground level
+                        // Position effectively changed back to ground level
                         position_changed = true;
                     }
 

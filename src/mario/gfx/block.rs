@@ -1,8 +1,8 @@
 use super::assets::{BLACK, BLOCK};
 use crate::{
-    display::{draw_rgb_bitmap, print_text},
-    engine::{millis, Direction, Event, Sprite},
     FBType,
+    display::{draw_rgb_bitmap, print_text},
+    engine::{Direction, Event, Sprite, millis},
 };
 use core::fmt::Write;
 use embassy_sync::{
@@ -122,18 +122,18 @@ impl Block {
         let mut next_y = self.y;
 
         // --- 1. Handle Incoming Events (Collision Detection) ---
-        if let Some(rx) = &mut self.rx {
-            if let Some(Event::Move(sprite_info)) = rx.try_next_message_pure() {
-                // Check for collision with other sprites (e.g., Mario)
-                if sprite_info.name != self.name() && self.collided_with(&sprite_info) {
-                    // If collided, trigger the hit animation
-                    self.trigger_hit_animation();
-                    // Publish a collision event *from* the block
-                    let info = self.get_info();
-                    if let Some(tx) = &mut self.tx {
-                        // Use non-blocking publish_immediate
-                        tx.publish_immediate(Event::Collision(info));
-                    }
+        if let Some(rx) = &mut self.rx
+            && let Some(Event::Move(sprite_info)) = rx.try_next_message_pure()
+        {
+            // Check for collision with other sprites (e.g., Mario)
+            if sprite_info.name != self.name() && self.collided_with(&sprite_info) {
+                // If collided, trigger the hit animation
+                self.trigger_hit_animation();
+                // Publish a collision event *from* the block
+                let info = self.get_info();
+                if let Some(tx) = &mut self.tx {
+                    // Use non-blocking publish_immediate
+                    tx.publish_immediate(Event::Collision(info));
                 }
             }
         }

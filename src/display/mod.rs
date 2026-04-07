@@ -1,15 +1,15 @@
 pub mod display_task;
 pub mod hub75_task;
 
-use crate::{mario::gfx::font::SUPER_MARIO_BROS_24PT, ROWS};
-use crate::{FBType, COLS};
+use crate::{COLS, FBType};
+use crate::{ROWS, mario::gfx::font::SUPER_MARIO_BROS_24PT};
 
 use embedded_graphics::{
+    Drawable, Pixel,
     pixelcolor::Rgb565,
     pixelcolor::Rgb888,
     prelude::{Point, Primitive, Size},
     primitives::{PrimitiveStyleBuilder, Rectangle},
-    Drawable, Pixel,
 };
 
 // Helper function to convert RGB565 u16 value  to RGB888
