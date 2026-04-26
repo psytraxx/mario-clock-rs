@@ -4,8 +4,8 @@ runner = "espflash flash -c esp32s3 -s 16mb -m dio -f 80mhz --no-skip --monitor"
 [env]
 ESP_LOG = "INFO"
 ESP_WIFI_COUNTRY_CODE = "DE"
-WIFI_SSID = \"REDACTED\"
-WIFI_PSK = \"REDACTED\"
+WIFI_SSID = "YourNetworkSSID"
+WIFI_PSK = "YourWifiPassword"
 
 [build]
 rustflags = ["-C", "link-arg=-nostartfiles"]

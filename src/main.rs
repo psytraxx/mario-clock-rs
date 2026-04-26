@@ -104,7 +104,7 @@ async fn main(spawner: Spawner) {
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
-    esp_rtos::start(timg0.timer0);
+    esp_rtos::start(timg0.timer0, sw_ints.software_interrupt0);
 
     println!("init framebuffer exchange");
     static TX: FrameBufferExchange = FrameBufferExchange::new();
@@ -148,14 +148,12 @@ async fn main(spawner: Spawner) {
             let high_pri_spawner = hp_executor.start(Priority::Priority3);
 
             // hub75 runs as high priority task
-            high_pri_spawner
-                .spawn(hub75_task(hub75_peripherals, &RX, &TX, fb1))
-                .ok();
+            high_pri_spawner.spawn(hub75_task(hub75_peripherals, &RX, &TX, fb1).unwrap());
 
             let lp_executor = mk_static!(Executor, Executor::new());
             // display task runs as low priority task
             lp_executor.run(|spawner| {
-                spawner.spawn(display_task(&TX, &RX, fb0)).ok();
+                spawner.spawn(display_task(&TX, &RX, fb0).unwrap());
             });
         }
     };
@@ -166,7 +164,6 @@ async fn main(spawner: Spawner) {
 
     esp_rtos::start_second_core(
         peripherals.CPU_CTRL,
-        sw_ints.software_interrupt0,
         sw_ints.software_interrupt1,
         app_core_stack,
         cpu1_fnctn,
