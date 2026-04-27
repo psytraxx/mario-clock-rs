@@ -32,6 +32,8 @@ jobs:
           ldproxy: false
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
+      - name: Copy config.toml
+        run: cp .cargo/config.toml.example .cargo/config.toml
       - name: Run build
         run: cargo build  --release
       - name: Run clippy
