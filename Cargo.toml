@@ -8,7 +8,7 @@ rand = { version = "0.10.0", default-features = false, features = [
     "log",
     "alloc",
 ] }
-esp-hal = { version = "1.1.0", features = ["esp32s3", "log-04", "unstable"] }
+esp-hal = { version = "1.1.1", features = ["esp32s3", "log-04", "unstable"] }
 
 esp-rtos = { version = "0.3.0", features = [
     "embassy",
@@ -21,12 +21,7 @@ esp-rtos = { version = "0.3.0", features = [
 esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3"] }
 log = "0.4.28"
 
-embassy-net = { version = "0.9.1", features = [
-    "dhcpv4",
-    "log",
-    "udp",
-    "dns",
-] }
+embassy-net = { version = "0.9.1", features = ["dhcpv4", "log", "udp", "dns"] }
 esp-alloc = "0.10.0"
 esp-backtrace = { version = "0.19.0", features = [
     "esp32s3",
@@ -47,19 +42,19 @@ esp-radio = { version = "0.18.0", features = [
 
 embassy-sync = "0.8.0"
 static_cell = "2.1.1"
-heapless = "0.9.2"
-esp-hub75 = { version = "0.10.0", features = ["esp32s3", "log"] }
+heapless = "0.9.3"
+esp-hub75 = { version = "0.11.0", features = ["esp32s3", "log"] }
 embedded-graphics = "0.8.2"
 embedded-hal = "1.0.0"
 pcf8563 = { git = "https://github.com/invpt/pcf8563-rs.git", branch = "main" }
-sntpc = { version = "0.9.0", default-features = false, features = ["log"] }
+sntpc = { version = "0.10.1", default-features = false, features = ["log"] }
 chrono = { version = "0.4.43", default-features = false }
 chrono-tz = { version = "0.10.4", default-features = false }
 micromath = { version = "2.1.0", default-features = false, features = [
     "num-traits",
 ] }
 embassy-futures = { version = "0.1.2", features = ["log"] }
-sntpc-net-embassy = { version = "0.9.0", features = ["log"] }
+sntpc-net-embassy = { version = "0.10.0", features = ["log"] }
 
 [profile.dev]
 # Rust debug is too slow.

@@ -43,7 +43,8 @@ pub(crate) async fn hub75_task(
 ) {
     println!("Starting hub75_task() on core {}", Cpu::current() as usize);
     let channel = peripherals.dma_channel;
-    let (_, tx_descriptors) = esp_hal::dma_descriptors!(0, FBType::dma_buffer_size_bytes());
+
+    let tx_descriptors = esp_hub75::hub75_dma_descriptors!(FBType);
 
     let pins = Hub75Pins16 {
         red1: peripherals.red1.degrade(),
