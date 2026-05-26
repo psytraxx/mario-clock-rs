@@ -19,7 +19,7 @@ esp-rtos = { version = "0.3.0", features = [
 ] }
 
 esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3"] }
-log = "0.4.28"
+log = "0.4.30"
 
 embassy-net = { version = "0.9.1", features = ["dhcpv4", "log", "udp", "dns"] }
 esp-alloc = "0.10.0"

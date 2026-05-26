@@ -13,7 +13,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
+  
 jobs:
   rust-checks:
     name: Rust Checks
@@ -30,11 +32,14 @@ jobs:
           default: true
           buildtargets: esp32s3
           ldproxy: false
-      - name: Enable caching
-        uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.10
       - name: Copy config.toml
         run: cp .cargo/config.toml.example .cargo/config.toml
       - name: Run build
         run: cargo build  --release
       - name: Run clippy
         run: cargo clippy --all-features --workspace -- -D warnings
+      - name: Run sccache stat for check
+        shell: bash
+        run: ${SCCACHE_PATH} --show-stats
