@@ -35,20 +35,19 @@ pub async fn connect_to_wifi(
             .with_password(env!("WIFI_PSK").into()),
     );
 
-    let (controller, interfaces) = wifi::new(
+    let interfaces = esp_radio::wifi::Interface::station();
+    let controller = wifi::WifiController::new(
         wifi,
         ControllerConfig::default().with_initial_config(station_config),
     )
     .inspect_err(|e| println!("Failed to create WiFi controller: {:?}", e))?;
-
-    let wifi_interface = interfaces.station;
 
     let dhcp_config = DhcpConfig::default();
     let config = Config::dhcpv4(dhcp_config);
 
     println!("Initialize network stack");
     let stack_resources: &'static mut _ = STACK_RESOURCES.init(StackResources::new());
-    let (stack, runner) = embassy_net::new(wifi_interface, config, stack_resources, seed);
+    let (stack, runner) = embassy_net::new(interfaces, config, stack_resources, seed);
 
     spawner.spawn(connection(controller).unwrap());
     spawner.spawn(net_task(runner).unwrap());
@@ -87,7 +86,7 @@ pub async fn connect_to_wifi(
 }
 
 #[embassy_executor::task]
-async fn net_task(mut runner: Runner<'static, Interface<'static>>) {
+async fn net_task(mut runner: Runner<'static, Interface>) {
     use embassy_futures::select::{Either, select};
 
     match select(runner.run(), STOP_NET_SIGNAL.wait()).await {

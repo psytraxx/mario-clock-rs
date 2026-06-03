@@ -19,7 +19,7 @@ esp-rtos = { version = "0.3.0", features = [
 ] }
 
 esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3"] }
-log = "0.4.30"
+log = "0.4.31"
 
 embassy-net = { version = "0.9.1", features = ["dhcpv4", "log", "udp", "dns"] }
 esp-alloc = "0.10.0"
@@ -32,7 +32,7 @@ esp-println = { version = "0.17.0", features = ["esp32s3", "log-04"] }
 # for more networking protocol support see https://crates.io/crates/edge-net
 embassy-executor = { version = "0.10.0", features = ["log"] }
 embassy-time = { version = "0.5.1", features = ["log"] }
-esp-radio = { version = "0.18.0", features = [
+esp-radio = { version = "=1.0.0-beta.0", features = [
     "esp-alloc",
     "esp32s3",
     "log-04",
