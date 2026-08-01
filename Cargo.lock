@@ -795,9 +795,9 @@ dependencies = [
 
 [[package]]
 name = "esp-hub75"
-version = "0.11.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1c1b6c2160bfa22afc4cffb8d496adcc9297f6a40e71fbd23461e9d2701747c"
+checksum = "77db31e5df7e454813bfc0095a378866f48692f21ecc6d54b2788e1f94c179be"
 dependencies = [
  "bitfield",
  "cfg-if",
@@ -1240,9 +1240,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hub75-framebuffer"
-version = "0.8.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ad2efd7f42f87fa3c59dde287d70c69ab3de74fddb964e1bf2fceb4578fc90a"
+checksum = "c3a13cb2b440a4ace4c1b20873d385f3d8eb8fa378112040c3f02184b688c71c"
 dependencies = [
  "bitfield",
  "embedded-dma",
@@ -1781,9 +1781,9 @@ dependencies = [
 
 [[package]]
 name = "sntpc"
-version = "0.10.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29793617f843f4e7df42c83b896939e5ca3b773a5b5d25ea68eaa247b7edbf9d"
+checksum = "294278b134cd7d06d7f22eca970aebe38707864c080f66547f9ad26327534af3"
 dependencies = [
  "cfg-if",
  "log",
@@ -1791,9 +1791,9 @@ dependencies = [
 
 [[package]]
 name = "sntpc-net-embassy"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c450c686c9762eff9878ac3dbd14094b9f76ea63cd383a21afbe8787c5bff9d4"
+checksum = "97d4addcbed51e6aa5178ba85834d1748b70da0f3df4552382a10afbfe285ae3"
 dependencies = [
  "cfg-if",
  "embassy-net",
