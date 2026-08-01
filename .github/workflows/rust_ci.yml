@@ -33,7 +33,7 @@ jobs:
           buildtargets: esp32s3
           ldproxy: false
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.10
+        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Copy config.toml
         run: cp .cargo/config.toml.example .cargo/config.toml
       - name: Run build
