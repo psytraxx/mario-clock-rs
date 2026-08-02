@@ -85,9 +85,9 @@ pub(crate) async fn hub75_task(
             let old_fb = fb.replace(new_fb).unwrap();
             tx.signal(old_fb);
         }
-        if let Some(ref mut fb) = fb {
+        if let Some(ref fb) = fb {
             let mut xfer = hub75
-                .render(fb)
+                .render(&**fb)
                 .map_err(|(e, _hub75)| e)
                 .expect("failed to start render!");
             xfer.wait_for_done()
