@@ -75,28 +75,26 @@ pub(crate) async fn hub75_task(
     let mut count = 0u32;
     let mut start = Instant::now();
 
-    // keep the frame buffer in an option so we can swap it
-    let mut fb = Some(fb);
+    let mut fb = fb;
 
     loop {
         // if there is a new buffer available, swap it and send the old one
         if rx.signaled() {
             let new_fb = rx.wait().await;
-            let old_fb = fb.replace(new_fb).unwrap();
-            tx.signal(old_fb);
+            tx.signal(fb);
+            fb = new_fb;
         }
-        if let Some(ref mut fb) = fb {
-            let mut xfer = hub75
-                .render(fb)
-                .map_err(|(e, _hub75)| e)
-                .expect("failed to start render!");
-            xfer.wait_for_done()
-                .await
-                .expect("render DMA transfer failed");
-            let (result, new_hub75) = xfer.wait();
-            hub75 = new_hub75;
-            result.expect("transfer failed");
-        }
+
+        let mut xfer = hub75
+            .render(fb)
+            .map_err(|(e, _hub75)| e)
+            .expect("failed to start render!");
+        xfer.wait_for_done()
+            .await
+            .expect("render DMA transfer failed");
+        let (result, new_hub75) = xfer.wait();
+        hub75 = new_hub75;
+        result.expect("transfer failed");
 
         count += 1;
         const FPS_INTERVAL: Duration = Duration::from_secs(1);

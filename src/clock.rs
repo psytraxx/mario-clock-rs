@@ -114,7 +114,8 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         if let Ok(response) = sntp_process_response(addr, socket_ref, context, req).await {
             println!("received NTP response: {:?}", response);
             let uptime_seconds = Instant::now().as_secs() as u32;
-            let boot_time_offset = response.seconds.saturating_sub(uptime_seconds);
+            // sntpc >= 0.11 reports seconds as u64; the offset fits in u32 well past 2100.
+            let boot_time_offset = response.seconds.saturating_sub(uptime_seconds as u64) as u32;
             TIME_OFFSET_SECONDS.store(boot_time_offset, Ordering::Relaxed);
             self.set_rtc();
         } else {

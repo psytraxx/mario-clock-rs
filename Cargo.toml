@@ -43,18 +43,18 @@ esp-radio = { version = "=1.0.0-beta.0", features = [
 embassy-sync = "0.8.0"
 static_cell = "2.1.1"
 heapless = "0.9.3"
-esp-hub75 = { version = "0.11.0", features = ["esp32s3", "log"] }
+esp-hub75 = { version = "0.13.0", features = ["esp32s3", "log"] }
 embedded-graphics = "0.8.2"
 embedded-hal = "1.0.0"
 pcf8563 = { git = "https://github.com/invpt/pcf8563-rs.git", branch = "main" }
-sntpc = { version = "0.10.1", default-features = false, features = ["log"] }
+sntpc = { version = "0.11.0", default-features = false, features = ["log"] }
 chrono = { version = "0.4.43", default-features = false }
 chrono-tz = { version = "0.10.4", default-features = false }
 micromath = { version = "2.1.0", default-features = false, features = [
     "num-traits",
 ] }
 embassy-futures = { version = "0.1.2", features = ["log"] }
-sntpc-net-embassy = { version = "0.10.0", features = ["log"] }
+sntpc-net-embassy = { version = "0.11.0", features = ["log"] }
 
 [profile.dev]
 # Rust debug is too slow.
