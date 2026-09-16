@@ -198,7 +198,11 @@ impl Clockface {
         // Advance Mario, then resolve collisions against the blocks directly.
         // This replaces the previous pub/sub channel, which delivered at most
         // one event per frame and so could drop a collision.
-        if self.mario.advance(jump) && self.mario.is_rising() {
+        //
+        // The collision must be tested against the step Mario just moved
+        // through: he reaches the blocks on the same step that hits the apex
+        // and flips his direction, so checking is_rising() here would miss it.
+        if self.mario.advance(jump) {
             let mario_info = self.mario.info();
             let mut hit = false;
 

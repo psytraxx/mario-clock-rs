@@ -61,15 +61,13 @@ impl Mario {
         }
     }
 
-    /// True while Mario is travelling upwards in a jump, i.e. able to hit a
-    /// block from below.
-    pub fn is_rising(&self) -> bool {
-        self.state == State::Jumping && self.direction == Direction::Up
-    }
-
-    /// Reverses an in-progress upward jump, as when Mario's head hits a block.
+    /// Sends Mario back down, as when his head strikes a block.
+    ///
+    /// Deliberately does not require `direction == Up`: he reaches a block on
+    /// the same step that hits the jump apex, by which point the direction has
+    /// already flipped, so gating on it here would drop the bounce.
     pub fn bounce_off_block(&mut self) {
-        if self.is_rising() {
+        if self.state == State::Jumping {
             self.direction = Direction::Down;
         }
     }
@@ -101,12 +99,18 @@ impl Mario {
         }
     }
 
-    /// Advances Mario's state and position. Returns `true` if he moved this
-    /// frame, which is what makes a block collision worth testing.
+    /// Advances Mario's state and position.
+    ///
+    /// Returns `true` if he moved *upwards* this step, i.e. this is a step on
+    /// which his head could strike a block. Note that `direction` may already
+    /// have flipped to `Down` by the time this returns, because the apex check
+    /// runs in the same step as the move -- so callers must use this return
+    /// value rather than inspecting the direction afterwards.
     pub fn advance(&mut self, trigger_jump: bool) -> bool {
         let current_millis = millis();
         let mut next_y = self.y;
         let mut position_changed = false;
+        let mut moved_up = false;
 
         if trigger_jump {
             self.start_jump();
@@ -120,14 +124,11 @@ impl Mario {
                 if current_millis.saturating_sub(self.last_animation_millis)
                     >= JUMP_ANIMATION_INTERVAL_MS
                 {
-                    let y_change = MARIO_PACE
-                        * if self.direction == Direction::Up {
-                            -1
-                        } else {
-                            1
-                        };
+                    let rising = self.direction == Direction::Up;
+                    let y_change = MARIO_PACE * if rising { -1 } else { 1 };
                     next_y += y_change;
                     position_changed = y_change != 0;
+                    moved_up = rising;
 
                     if self.direction == Direction::Up
                         && (self.jump_start_y - next_y) >= MARIO_JUMP_HEIGHT
@@ -153,7 +154,7 @@ impl Mario {
             self.y = next_y;
         }
 
-        position_changed
+        moved_up
     }
 
     /// Draws Mario at his current position.
