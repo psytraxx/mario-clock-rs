@@ -4,26 +4,37 @@ pub mod hub75_task;
 use crate::{COLS, FBType};
 use crate::{ROWS, mario::gfx::font::SUPER_MARIO_BROS_24PT};
 
-use embedded_graphics::{
-    Drawable, Pixel,
-    pixelcolor::Rgb565,
-    pixelcolor::Rgb888,
-    prelude::{Point, Primitive, Size},
-    primitives::{PrimitiveStyleBuilder, Rectangle},
-};
+use embedded_graphics::{pixelcolor::Rgb888, prelude::*};
 
-// Helper function to convert RGB565 u16 value  to RGB888
-fn to_rgb888(color: u16) -> Rgb888 {
-    // Extract 5-bit red, 6-bit green, and 5-bit blue.
+/// Converts an RGB565 value to the framebuffer's RGB888 color, dimming it.
+///
+/// The `/ 4` on each channel is a deliberate brightness cut for the panel. It
+/// is applied to the 8-bit output rather than to the 5/6-bit input so the
+/// result keeps its gradation instead of collapsing to 3/4/3 bits.
+pub(crate) const fn to_rgb888(color: u16) -> Rgb888 {
     let r5 = ((color >> 11) & 0x1F) as u8;
     let g6 = ((color >> 5) & 0x3F) as u8;
     let b5 = (color & 0x1F) as u8;
-    // Convert to 8-bit RGB888 and dim it down
-    let rgb565: Rgb565 = Rgb565::new(r5 / 4, g6 / 4, b5 / 4);
 
-    rgb565.into()
+    // Expand to full 8-bit range, then dim.
+    let r8 = (r5 << 3) | (r5 >> 2);
+    let g8 = (g6 << 2) | (g6 >> 4);
+    let b8 = (b5 << 3) | (b5 >> 2);
+
+    Rgb888::new(r8 / 4, g8 / 4, b8 / 4)
 }
 
+/// The transparency key for sprite data.
+///
+/// NOTE: pure black is the sentinel, so black is *not* usable as a sprite
+/// color -- a black pixel in any sprite is treated as see-through. Use a very
+/// dark non-zero value if you need near-black in artwork.
+pub(crate) const TRANSPARENT: u16 = 0x0000;
+
+/// Draws an RGB565 sprite, skipping transparent pixels.
+///
+/// Writes through `set_pixel`, which is an inlined direct write, rather than
+/// going through `Drawable` per pixel.
 pub(crate) fn draw_rgb_bitmap(
     fb: &mut FBType,
     x: i32,
@@ -32,53 +43,46 @@ pub(crate) fn draw_rgb_bitmap(
     width: i32,
     height: i32,
 ) {
-    let image_width = width as usize;
-    let image_height = height as usize;
-    let start_point = Point::new(x, y);
+    for row in 0..height {
+        let dest_y = y + row;
+        if dest_y < 0 || dest_y >= COLS as i32 {
+            continue;
+        }
+        let row_start = (row * width) as usize;
 
-    // Iterate over the pixels of the image
-    for row in 0..image_height {
-        for col in 0..image_width {
-            let pixel_index = row * image_width + col;
-            // Basic bounds check for the source image data
-            if pixel_index >= image.len() {
+        for col in 0..width {
+            let dest_x = x + col;
+            if dest_x < 0 || dest_x >= ROWS as i32 {
                 continue;
             }
 
-            let rgb565_color = image[pixel_index];
-            // Simple transparency: skip black pixels (adjust if needed, 0x0000 is black in RGB565)
-            if rgb565_color == 0 {
+            let Some(&rgb565) = image.get(row_start + col as usize) else {
+                continue;
+            };
+            if rgb565 == TRANSPARENT {
                 continue;
             }
 
-            // Use the helper from this module
-            let rgb888_color = to_rgb888(rgb565_color);
-
-            // Calculate the target point on the framebuffer
-            let target_point = start_point + Point::new(col as i32, row as i32);
-
-            // Draw the single pixel if it's within the framebuffer bounds
-            if target_point.x >= 0
-                && target_point.x < ROWS as i32
-                && target_point.y >= 0
-                && target_point.y < COLS as i32
-            {
-                Pixel(target_point, rgb888_color).draw(fb).ok(); // Ignore errors
-            }
+            fb.set_pixel(Point::new(dest_x, dest_y), to_rgb888(rgb565));
         }
     }
 }
 
 pub(crate) fn fill_rect(fb: &mut FBType, x: i32, y: i32, width: u32, height: u32, color565: u16) {
-    let start_point = Point::new(x, y);
-    let size = Size::new(width, height);
-    let style = PrimitiveStyleBuilder::new()
-        .fill_color(to_rgb888(color565))
-        .build();
-    Rectangle::new(start_point, size)
-        .into_styled(style)
-        .draw(fb)
-        .expect("Failed to draw rectangle");
+    let color = to_rgb888(color565);
+    for row in 0..height as i32 {
+        let dest_y = y + row;
+        if dest_y < 0 || dest_y >= COLS as i32 {
+            continue;
+        }
+        for col in 0..width as i32 {
+            let dest_x = x + col;
+            if dest_x < 0 || dest_x >= ROWS as i32 {
+                continue;
+            }
+            fb.set_pixel(Point::new(dest_x, dest_y), color);
+        }
+    }
 }
 
 pub(crate) fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: u16) {
@@ -93,7 +97,9 @@ pub(crate) fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: 
         }
 
         let glyph_index = c as usize - font.first as usize;
-        let glyph = &font.glyph[glyph_index];
+        let Some(glyph) = font.glyph.get(glyph_index) else {
+            continue;
+        };
         let bitmap = &font.bitmap[glyph.bitmap_offset as usize..];
 
         for row in 0..glyph.height {
@@ -111,9 +117,11 @@ pub(crate) fn print_text(fb: &mut FBType, text: &str, x: i32, y: i32, color565: 
                 }
 
                 let bit_index = bitmap_row_start + col as usize;
-                if bitmap[bit_index / 8] & (0x80 >> (bit_index % 8)) != 0 {
-                    let target_point = Point::new(dest_x, dest_y);
-                    Pixel(target_point, color).draw(fb).ok(); // Draw pixel using fb
+                // Checked read: a truncated/malformed glyph must not panic on a
+                // device that runs unattended. Missing bytes read as blank.
+                let byte = bitmap.get(bit_index / 8).copied().unwrap_or(0);
+                if byte & (0x80 >> (bit_index % 8)) != 0 {
+                    fb.set_pixel(Point::new(dest_x, dest_y), color);
                 }
             }
         }

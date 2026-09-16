@@ -32,6 +32,8 @@ esp-println = { version = "0.18.0", features = ["esp32s3", "log-04"] }
 # for more networking protocol support see https://crates.io/crates/edge-net
 embassy-executor = { version = "0.10.0", features = ["log"] }
 embassy-time = { version = "0.5.1", features = ["log"] }
+# Pinned exactly: esp-radio is pre-1.0 and its API still shifts between betas,
+# which would break the wifi task on an unattended bump.
 esp-radio = { version = "=1.0.0-beta.1", features = [
     "esp-alloc",
     "esp32s3",

@@ -1,6 +1,5 @@
 use embassy_executor::Spawner;
 use embassy_net::{Config, DhcpConfig, Runner, Stack, StackResources};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
 use esp_hal::peripherals::WIFI;
 use esp_println::println;
@@ -13,17 +12,8 @@ use static_cell::StaticCell;
 
 static STACK_RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 
-pub(crate) static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-
-static STOP_NET_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-
-pub async fn shutdown_wifi() {
-    println!("Requesting WiFi shutdown...");
-    STOP_WIFI_SIGNAL.signal(());
-    STOP_NET_SIGNAL.signal(());
-    Timer::after(Duration::from_millis(3000)).await;
-    println!("WiFi shutdown complete");
-}
+/// Delay before retrying a failed association attempt.
+const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 pub async fn connect_to_wifi(
     wifi: WIFI<'static>,
@@ -90,15 +80,7 @@ pub async fn connect_to_wifi(
 
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, Interface>) {
-    use embassy_futures::select::{Either, select};
-
-    match select(runner.run(), STOP_NET_SIGNAL.wait()).await {
-        Either::First(_) => {}
-        Either::Second(_) => {
-            println!("Network task received stop signal");
-        }
-    }
-    println!("Network task stopped");
+    runner.run().await
 }
 
 #[embassy_executor::task]
@@ -108,6 +90,11 @@ async fn connection(controller: WifiController<'static>) {
     }
 }
 
+/// Keeps the station associated for the lifetime of the device.
+///
+/// The link must stay up because periodic NTP re-sync reuses this stack: the
+/// embassy tasks and `StackResources` are single-instance, so the stack cannot
+/// be torn down and rebuilt later.
 async fn connection_fallible(mut controller: WifiController<'static>) -> Result<(), WifiError> {
     println!("Start connection task");
     println!("About to connect to {}...", env!("WIFI_SSID"));
@@ -115,19 +102,19 @@ async fn connection_fallible(mut controller: WifiController<'static>) -> Result<
         match controller.connect_async().await {
             Ok(info) => {
                 println!("Connected to WiFi network: {:?}", info);
-                STOP_WIFI_SIGNAL.wait().await;
-                println!("Received signal to stop wifi");
-                if let Err(e) = controller.disconnect_async().await {
-                    println!("Error disconnecting: {:?}", e);
+                // Resolves when the AP drops us; fall through and reconnect.
+                match controller.wait_for_disconnect_async().await {
+                    Ok(info) => println!("WiFi disconnected ({:?}) - reconnecting", info),
+                    Err(e) => {
+                        println!("Error waiting for disconnect: {:?} - retrying", e);
+                        Timer::after(RECONNECT_DELAY).await;
+                    }
                 }
-                break;
             }
             Err(error) => {
                 println!("Failed to connect to WiFi network: {:?}", error);
-                Timer::after(Duration::from_millis(5000)).await;
+                Timer::after(RECONNECT_DELAY).await;
             }
         }
     }
-    println!("Leave connection task");
-    Ok(())
 }

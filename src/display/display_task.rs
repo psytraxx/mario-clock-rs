@@ -2,9 +2,10 @@ use core::sync::atomic::Ordering;
 use embassy_executor::task;
 use esp_hal::system::Cpu;
 use esp_println::println;
+use static_cell::StaticCell;
 
 use crate::mario::clockface::Clockface;
-use crate::{ClockfaceTrait, FBType, FrameBufferExchange, REFRESH_RATE};
+use crate::{FBType, FrameBufferExchange, REFRESH_RATE};
 
 #[task]
 pub(crate) async fn display_task(
@@ -17,16 +18,16 @@ pub(crate) async fn display_task(
         Cpu::current() as usize
     );
 
-    // Initialize clockface
-    let mut cf = Clockface::new();
+    // Initialize clockface in static storage: it holds several KB of sprite
+    // buffers, more than this task's stack can hold.
+    static CLOCKFACE: StaticCell<Clockface> = StaticCell::new();
+    let cf = Clockface::init(&CLOCKFACE);
 
     loop {
         // Update clock logic
-        cf.update(fb).await;
+        cf.update(fb);
 
         let _rate = REFRESH_RATE.load(Ordering::Relaxed);
-
-        //println!("Refresh: {:4}", rate);
 
         // send the frame buffer to be rendered
         tx.signal(fb);

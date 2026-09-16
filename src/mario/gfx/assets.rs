@@ -1,6 +1,12 @@
 // Define color constants
 pub const SKY_COLOR: u16 = 0x000E;
 pub const BLACK: u16 = 0x0000;
+/// Background filler in sprite artwork.
+///
+/// NOTE: this is *not* the transparency key -- it equals `SKY_COLOR`, so it
+/// draws as opaque sky. The actual key is pure black (`0x0000`), which means
+/// black cannot be used as a sprite color; use a dark non-zero value instead.
+/// See `display::TRANSPARENT`.
 pub const _MASK: u16 = SKY_COLOR;
 
 pub const M_RED: u16 = 0xF801;
@@ -98,22 +104,25 @@ pub const BUSH: &[u16; 189] = &[
 ///
 /// # Returns
 ///
-/// An `Option<[u16; 512]>` containing the pixel data for the generated cloud
-/// within a fixed-size buffer. The relevant part corresponds to `width * height`.
+/// `true` if the cloud was generated into `pixels`; `false` if the requested
+/// dimensions do not fit the buffer, in which case `pixels` is left untouched.
+/// The relevant part of the buffer corresponds to `width * height`.
 pub fn generate_cloud(
+    pixels: &mut [u16; 512],
     width: usize,
     height: usize,
     num_circles: u8,
     seed: u64,
-) -> Option<[u16; 512]> {
+) -> bool {
     let size = width * height;
     if size == 0 || size > 512 {
-        return None; // Ensure size is valid and doesn't exceed capacity
+        return false; // Ensure size is valid and doesn't exceed capacity
     }
 
-    // Initialize RNG and pixel buffer (stack-allocated array)
+    // Initialize RNG and reset the caller's buffer in place. Writing through a
+    // borrow avoids returning a 1 KB array by value on a small task stack.
     let mut rng = SmallRng::seed_from_u64(seed);
-    let mut pixels = [SKY_COLOR; 512]; // Use fixed-size array
+    pixels.fill(SKY_COLOR);
 
     // --- Generate Circles ---
     let max_radius = (width.min(height) as f32 / 2.0).max(1.0); // Ensure radius is at least 1
@@ -212,7 +221,7 @@ pub fn generate_cloud(
     // 3. Inset the edge (apply outline color, modifying pixels array)
     // Need to read original state for this pass. Let's re-introduce the clone here,
     // or perform the check differently. A clone is simpler for now.
-    let original_pixels = pixels; // Clone the state after circle generation
+    let original_pixels = *pixels; // Snapshot the state after circle generation
 
     for y in 1..(height.saturating_sub(1)) {
         for x in 1..(width.saturating_sub(1)) {
@@ -239,7 +248,7 @@ pub fn generate_cloud(
         }
     }
 
-    Some(pixels) // Return the modified array
+    true
 }
 
 pub const GROUND: &[u16; 64] = &[
