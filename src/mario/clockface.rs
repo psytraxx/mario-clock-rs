@@ -1,14 +1,11 @@
 use chrono::Timelike;
-use core::sync::atomic::{AtomicU32, Ordering};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
-use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use static_cell::StaticCell;
 
 use crate::{
-    COLS, ClockfaceTrait, FBType, I2CType, ROWS,
+    COLS, DISPLAY_TIMEZONE, FBType, I2CType, ROWS,
     clock::Clock,
     display::fill_rect,
-    engine::{Event, Sprite, object::Object, tile::Tile},
+    engine::{millis, object::Object, tile::Tile},
 };
 
 use super::gfx::{
@@ -18,22 +15,21 @@ use super::gfx::{
     mario::Mario,
 };
 
-static CHANNEL: StaticCell<PubSubChannel<CriticalSectionRawMutex, Event, 3, 4, 4>> =
-    StaticCell::new();
-
 // --- Constants ---
-const CLOUD_MOVE_INTERVAL: u32 = 20; // Move cloud every X update cycles
+/// Wall-clock interval between cloud movements. Time-based rather than
+/// frame-based so cloud speed does not vary with render load or with changes
+/// to PLANES / pixel clock.
+const CLOUD_MOVE_INTERVAL_MS: u64 = 120;
 const CLOUD_PIXELS_PER_MOVE: i32 = 1; // Pixels to move the cloud when it moves
 const CLOUD1_WIDTH: usize = 24;
 const CLOUD1_HEIGHT: usize = 13;
 const CLOUD2_WIDTH: usize = 16;
 const CLOUD2_HEIGHT: usize = 13;
-const INITIAL_CLOUD1_SEED: u64 = 1; // Define initial seed
-const INITIAL_CLOUD2_SEED: u64 = 2; // Define initial seed for cloud2
+const INITIAL_CLOUD1_SEED: u64 = 1;
+const INITIAL_CLOUD2_SEED: u64 = 2;
 
-// Track the last minute when Mario jumped to prevent multiple jumps per minute
-// Initialized to 255 (invalid minute) to ensure first jump always triggers
-static LAST_JUMP_MINUTE: AtomicU32 = AtomicU32::new(255);
+/// Sentinel minute, outside 0..=59, so the first minute change always jumps.
+const NO_MINUTE: u32 = u32::MAX;
 
 pub(crate) struct Clockface {
     ground: Tile,
@@ -47,163 +43,185 @@ pub(crate) struct Clockface {
     // Cloud positions
     cloud1_x: i32,
     cloud2_x: i32,
-    // Frame counter for slow movement
-    frame_count: u32,
+    // Timestamp of the last cloud movement
+    last_cloud_move_millis: u64,
     // Seeds for cloud generation
     cloud1_seed: u64,
     cloud2_seed: u64,
+    /// Scratch buffer for cloud generation, reused to keep 1 KB arrays off the
+    /// task stack.
+    cloud_scratch: [u16; 512],
+    /// Last minute on which Mario jumped, so he jumps once per minute.
+    last_jump_minute: u32,
 }
 
 impl Clockface {
-    pub fn new() -> Self {
-        let channel: &'static mut _ = CHANNEL.init(PubSubChannel::new());
-
-        let mut mario = Mario::new(23, 40);
-        mario.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
-
-        let mut hour_block = Block::new(13, 8);
-        hour_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
-
-        let mut minute_block = Block::new(32, 8);
-        minute_block.subscribe(channel.publisher().unwrap(), channel.subscriber().unwrap());
-
-        let cloud1_seed = INITIAL_CLOUD1_SEED;
-        let cloud1_array = generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, 5, cloud1_seed)
-            .expect("Failed to generate initial cloud1");
-        let cloud1_size = CLOUD1_WIDTH * CLOUD1_HEIGHT;
-
-        let cloud2_seed = INITIAL_CLOUD2_SEED;
-        let cloud2_array = generate_cloud(CLOUD2_WIDTH, CLOUD2_HEIGHT, 5, cloud2_seed)
-            .expect("Failed to generate initial cloud2");
-        let cloud2_size = CLOUD2_WIDTH * CLOUD2_HEIGHT;
-
-        Self {
+    /// Builds the clock face directly into `cell`.
+    ///
+    /// The struct carries several kilobytes of sprite buffers, which is more
+    /// than the display task's stack can hold, so it is constructed in place
+    /// in static storage rather than returned by value.
+    pub fn init(cell: &'static StaticCell<Clockface>) -> &'static mut Clockface {
+        let this = cell.init(Self {
             ground: Tile::new(GROUND, 8, 8),
             bush: Object::new(BUSH, 21, 9),
-            cloud1: Object::new(
-                &cloud1_array[0..cloud1_size],
-                CLOUD1_WIDTH as i32,
-                CLOUD1_HEIGHT as i32,
-            ),
-            cloud2: Object::new(
-                &cloud2_array[0..cloud2_size],
-                CLOUD2_WIDTH as i32,
-                CLOUD2_HEIGHT as i32,
-            ),
+            // Clouds start empty and are generated in place below, so no
+            // full-size sprite buffer is ever built on the stack.
+            cloud1: Object::empty(CLOUD1_WIDTH as i32, CLOUD1_HEIGHT as i32),
+            cloud2: Object::empty(CLOUD2_WIDTH as i32, CLOUD2_HEIGHT as i32),
             hill: Object::new(HILL, 20, 22),
-            mario,
-            hour_block,
-            minute_block,
+            mario: Mario::new(23, 40),
+            hour_block: Block::new(13, 8),
+            minute_block: Block::new(32, 8),
             // Initial cloud positions
-            cloud1_x: 0,    // Start cloud1 near the left
-            cloud2_x: 51,   // Start cloud2 further right
-            frame_count: 0, // Initialize frame counter
-            cloud1_seed,    // Store initial seed
-            cloud2_seed,    // Store initial seed for cloud2
-        }
+            cloud1_x: 0,  // Start cloud1 near the left
+            cloud2_x: 51, // Start cloud2 further right
+            last_cloud_move_millis: 0,
+            cloud1_seed: INITIAL_CLOUD1_SEED,
+            cloud2_seed: INITIAL_CLOUD2_SEED,
+            cloud_scratch: [0u16; 512],
+            last_jump_minute: NO_MINUTE,
+        });
+
+        let seed = this.cloud1_seed;
+        Self::regenerate_cloud(
+            &mut this.cloud_scratch,
+            &mut this.cloud1,
+            CLOUD1_WIDTH,
+            CLOUD1_HEIGHT,
+            5,
+            seed,
+        );
+
+        let seed = this.cloud2_seed;
+        Self::regenerate_cloud(
+            &mut this.cloud_scratch,
+            &mut this.cloud2,
+            CLOUD2_WIDTH,
+            CLOUD2_HEIGHT,
+            5,
+            seed,
+        );
+
+        this
     }
 
     pub fn now() -> chrono::DateTime<chrono_tz::Tz> {
-        Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich)
+        Clock::<I2CType>::get_time_in_zone(DISPLAY_TIMEZONE)
     }
 
-    /// Updates the position of a cloud, returns true if it wrapped.
-    fn update_cloud_position(x: &mut i32, width: i32, frame_count: u32) -> bool {
-        let mut wrapped = false;
-        // Only move the cloud every CLOUD_MOVE_INTERVAL frames
-        if frame_count.is_multiple_of(CLOUD_MOVE_INTERVAL) {
-            *x -= CLOUD_PIXELS_PER_MOVE;
-            // If the cloud is completely off the left edge
-            if *x + width < 0 {
-                // Reset its position to the right edge
-                *x = COLS as i32;
-                wrapped = true; // Signal that wrapping occurred
-            }
+    /// Moves a cloud left by one step, returning true if it wrapped off-screen.
+    fn step_cloud(x: &mut i32, width: i32) -> bool {
+        *x -= CLOUD_PIXELS_PER_MOVE;
+        if *x + width < 0 {
+            *x = COLS as i32;
+            return true;
         }
-        wrapped
+        false
     }
-}
 
-impl ClockfaceTrait for Clockface {
-    async fn update(&mut self, fb: &mut FBType) {
-        // Increment frame counter (wraps around automatically on overflow)
-        self.frame_count = self.frame_count.wrapping_add(1);
+    /// Regenerates a cloud's pixels in place, reusing the scratch buffer and
+    /// the object's existing allocation.
+    fn regenerate_cloud(
+        scratch: &mut [u16; 512],
+        cloud: &mut Object,
+        width: usize,
+        height: usize,
+        circles: u8,
+        seed: u64,
+    ) {
+        if generate_cloud(scratch, width, height, circles, seed) {
+            cloud.set_sprite(&scratch[..width * height]);
+        }
+    }
+
+    pub fn update(&mut self, fb: &mut FBType) {
+        let now_millis = millis();
 
         // --- 1. Clear Background ---
         fill_rect(fb, 0, 0, ROWS as u32, COLS as u32, SKY_COLOR);
 
         // --- 2. Update Cloud Positions & Regenerate clouds if needed ---
-        let cloud1_wrapped =
-            Self::update_cloud_position(&mut self.cloud1_x, CLOUD1_WIDTH as i32, self.frame_count);
-        let cloud2_wrapped =
-            Self::update_cloud_position(&mut self.cloud2_x, CLOUD2_WIDTH as i32, self.frame_count);
+        if now_millis.saturating_sub(self.last_cloud_move_millis) >= CLOUD_MOVE_INTERVAL_MS {
+            self.last_cloud_move_millis = now_millis;
 
-        if cloud1_wrapped {
-            // Update seed - using frame_count ensures variety
-            self.cloud1_seed = self.frame_count as u64;
+            if Self::step_cloud(&mut self.cloud1_x, CLOUD1_WIDTH as i32) {
+                // Derive the next seed from the previous one so successive
+                // clouds differ without depending on frame timing.
+                self.cloud1_seed = self.cloud1_seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let circles = 4 + (self.cloud1_seed >> 33) as u8 % 5;
+                Self::regenerate_cloud(
+                    &mut self.cloud_scratch,
+                    &mut self.cloud1,
+                    CLOUD1_WIDTH,
+                    CLOUD1_HEIGHT,
+                    circles,
+                    self.cloud1_seed,
+                );
+            }
 
-            let mut rng = SmallRng::seed_from_u64(self.cloud1_seed);
-            let circles = rng.random_range(4..9); // More varied circle count
-            // Regenerate cloud data
-            let cloud1_array =
-                generate_cloud(CLOUD1_WIDTH, CLOUD1_HEIGHT, circles, self.cloud1_seed)
-                    .expect("Failed to regenerate cloud1");
-            let cloud1_size = CLOUD1_WIDTH * CLOUD1_HEIGHT;
-            // Replace the cloud1 object with a new one containing the new data
-            self.cloud1 = Object::new(
-                &cloud1_array[0..cloud1_size],
-                CLOUD1_WIDTH as i32,
-                CLOUD1_HEIGHT as i32,
-            );
-        }
-
-        if cloud2_wrapped {
-            // Update seed - using frame_count + offset ensures variety and difference from cloud1
-            self.cloud2_seed = self.frame_count as u64 + 1000;
-
-            let mut rng = SmallRng::seed_from_u64(self.cloud2_seed);
-            let circles = rng.random_range(3..8); // More varied circle count
-            // Regenerate cloud data
-            let cloud2_array =
-                generate_cloud(CLOUD2_WIDTH, CLOUD2_HEIGHT, circles, self.cloud2_seed)
-                    .expect("Failed to regenerate cloud2");
-            let cloud2_size = CLOUD2_WIDTH * CLOUD2_HEIGHT;
-            // Replace the cloud2 object with a new one containing the new data
-            self.cloud2 = Object::new(
-                &cloud2_array[0..cloud2_size],
-                CLOUD2_WIDTH as i32,
-                CLOUD2_HEIGHT as i32,
-            );
+            if Self::step_cloud(&mut self.cloud2_x, CLOUD2_WIDTH as i32) {
+                self.cloud2_seed = self.cloud2_seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let circles = 3 + (self.cloud2_seed >> 33) as u8 % 5;
+                Self::regenerate_cloud(
+                    &mut self.cloud_scratch,
+                    &mut self.cloud2,
+                    CLOUD2_WIDTH,
+                    CLOUD2_HEIGHT,
+                    circles,
+                    self.cloud2_seed,
+                );
+            }
         }
 
         // --- 3. Draw Static Background Elements ---
         self.ground.fill_row(COLS as i32 - self.ground.height(), fb);
-        self.bush.draw(43, 47, fb); // Bush position seems fixed
-        self.hill.draw(0, 34, fb); // Hill position seems fixed
+        self.bush.draw(43, 47, fb);
+        self.hill.draw(0, 34, fb);
 
         // --- 4. Draw Moving Clouds ---
-        self.cloud1.draw(self.cloud1_x, 21, fb); // Use updated x, fixed y
-        self.cloud2.draw(self.cloud2_x, 7, fb); // Use updated x, fixed y
+        self.cloud1.draw(self.cloud1_x, 21, fb);
+        self.cloud2.draw(self.cloud2_x, 7, fb);
 
         // --- 5. Update Time and Interactive Elements ---
         let now = Self::now();
 
-        // Check if it's time to trigger a jump - we jump every minute
-        // Use atomic compare-and-swap to ensure we only jump once per minute
-        // even if update() is called multiple times per second
+        // Jump once per minute, on the transition into second 0.
         let current_minute = now.minute();
-        let last_minute = LAST_JUMP_MINUTE.load(Ordering::Relaxed);
-        let jump = if current_minute != last_minute && now.second() == 0 {
-            // New minute detected and we're at second 0
-            LAST_JUMP_MINUTE.store(current_minute, Ordering::Relaxed);
+        let jump = if current_minute != self.last_jump_minute && now.second() == 0 {
+            self.last_jump_minute = current_minute;
             true
         } else {
             false
         };
 
-        // Update Mario (handles jump trigger) and time blocks
-        self.mario.update(fb, jump).await;
-        self.hour_block.update(fb, now.hour()).await;
-        self.minute_block.update(fb, now.minute()).await;
+        // Advance Mario, then resolve collisions against the blocks directly.
+        // This replaces the previous pub/sub channel, which delivered at most
+        // one event per frame and so could drop a collision.
+        //
+        // The collision must be tested against the step Mario just moved
+        // through: he reaches the blocks on the same step that hits the apex
+        // and flips his direction, so checking is_rising() here would miss it.
+        if self.mario.advance(jump) {
+            let mario_info = self.mario.info();
+            let mut hit = false;
+
+            if mario_info.collides_with(&self.hour_block.info()) {
+                self.hour_block.trigger_hit_animation();
+                hit = true;
+            }
+            if mario_info.collides_with(&self.minute_block.info()) {
+                self.minute_block.trigger_hit_animation();
+                hit = true;
+            }
+
+            if hit {
+                self.mario.bounce_off_block();
+            }
+        }
+
+        self.mario.draw(fb);
+        self.hour_block.update(fb, now.hour());
+        self.minute_block.update(fb, now.minute());
     }
 }

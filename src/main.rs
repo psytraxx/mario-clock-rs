@@ -7,7 +7,7 @@
 )]
 
 use clock::{Clock, ClockBuffs};
-use core::{future::Future, sync::atomic::AtomicU32};
+use core::sync::atomic::AtomicU32;
 use display::{
     display_task::display_task,
     hub75_task::{Hub75Peripherals, hub75_task},
@@ -30,7 +30,7 @@ use esp_hub75::framebuffer::{bitplane::plain::frame::DmaFrameBuffer, compute_row
 use esp_println::{logger::init_logger_from_env, println};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
-use wifi_task::{connect_to_wifi, shutdown_wifi};
+use wifi_task::connect_to_wifi;
 
 mod clock;
 mod display;
@@ -67,9 +67,12 @@ macro_rules! mk_static {
 
 static REFRESH_RATE: AtomicU32 = AtomicU32::new(0);
 
-pub(crate) trait ClockfaceTrait {
-    fn update(&mut self, fb: &mut FBType) -> impl Future<Output = ()> + Send;
-}
+/// How often to re-sync from NTP. The PCF8563 drifts on the order of seconds
+/// per day, so daily keeps the displayed minute honest.
+const RESYNC_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Timezone the clock face displays.
+pub(crate) const DISPLAY_TIMEZONE: chrono_tz::Tz = chrono_tz::Europe::Zurich;
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
@@ -90,12 +93,9 @@ async fn main(spawner: Spawner) {
             .with_scl(peripherals.GPIO42)
             .with_sda(peripherals.GPIO41),
         Err(e) => {
-            println!("FATAL ERROR: Unable to create I2C instance: {:?}", e);
-            println!("Cannot continue without I2C for RTC");
-            loop {
-                // Halt execution - RTC is critical for clock functionality
-                Timer::after(Duration::from_secs(1)).await;
-            }
+            // Panicking resets the device so it retries, which beats spinning
+            // here forever with the panel dark and no watchdog to recover.
+            panic!("FATAL: unable to create I2C instance for RTC: {:?}", e);
         }
     };
 
@@ -181,59 +181,37 @@ async fn main(spawner: Spawner) {
     let rng = Rng::new();
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
-    // WiFi is used only for initial NTP time synchronization
-    // This is a one-shot operation to minimize power consumption
-    {
-        // Connect to WiFi with error handling
-        let stack = match connect_to_wifi(peripherals.WIFI, seed, spawner).await {
-            Ok(s) => s,
-            Err(e) => {
-                println!("ERROR: Failed to connect to WiFi: {:?}", e);
-                println!("Continuing with RTC time only (may be inaccurate)");
-                // Don't panic - clock can still function with RTC time
-                // Skip NTP sync and continue
-                println!("WiFi resources released. Running clock from RTC.");
-                loop {
-                    Timer::after(Duration::from_secs(60)).await;
+    // Bring WiFi up once and keep the stack alive: the embassy tasks and
+    // StackResources are single-instance, so tearing the stack down would make
+    // a later re-sync impossible.
+    let stack = match connect_to_wifi(peripherals.WIFI, seed, spawner).await {
+        Ok(s) => {
+            if let Some(config) = s.config_v4() {
+                println!("Client IP: {}", config.address);
+            }
+            Some(s)
+        }
+        Err(e) => {
+            println!("WiFi connect failed: {:?} - running on RTC time only", e);
+            None
+        }
+    };
+
+    // Initial sync, then re-sync periodically so RTC drift stays bounded.
+    loop {
+        if let Some(stack) = stack {
+            match clock.sync_ntp(stack, &mut clock_buffs).await {
+                Ok(()) => {
+                    let time = Clock::<I2CType>::get_time_in_zone(DISPLAY_TIMEZONE);
+                    println!("NTP sync successful, time is now {}", time);
+                }
+                Err(e) => {
+                    println!("NTP sync failed: {:?} - continuing on RTC time", e);
                 }
             }
-        };
-
-        if let Some(stack_config) = stack.config_v4() {
-            println!("Client IP: {}", stack_config.address);
-        } else {
-            println!("Warning: Failed to get stack config");
         }
 
-        // Sync NTP with error handling
-        match clock.sync_ntp(stack, &mut clock_buffs).await {
-            Ok(_) => {
-                println!("NTP sync successful");
-                let time = Clock::<I2CType>::get_time_in_zone(chrono_tz::Europe::Zurich);
-                println!("Current time: {}", time);
-            }
-            Err(e) => {
-                println!("Warning: Failed to sync NTP: {:?}", e);
-                println!("Continuing with RTC time (may be inaccurate)");
-                // Don't panic - clock can still work with RTC
-            }
-        }
-
-        println!("Shutting down WiFi and network stack");
-
-        // Properly shutdown WiFi
-        shutdown_wifi().await;
-
-        // Stack is dropped here, freeing network resources
-        // RTC maintains time accuracy between reboots
-    }
-
-    println!("WiFi resources released. Running clock from RTC.");
-
-    loop {
-        info!("Starting clock update cycle");
-        // Main task keeps running to prevent executor exit
-        // Display continues on Core 1 independently
-        Timer::after(Duration::from_secs(60)).await;
+        Timer::after(RESYNC_INTERVAL).await;
+        info!("Starting scheduled NTP re-sync");
     }
 }

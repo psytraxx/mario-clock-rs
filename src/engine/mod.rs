@@ -1,7 +1,3 @@
-use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
-    pubsub::{Publisher, Subscriber},
-};
 use embassy_time::Instant;
 
 pub mod object;
@@ -12,62 +8,34 @@ pub mod tile;
 pub(crate) enum Direction {
     Up,
     Down,
-    //Left,
-    //Right,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A sprite's position and extent, used for collision tests.
+///
+/// Coordinates are `i32` throughout: the display is small enough that `i8`
+/// would fit today, but `x + width` in `collides_with` would silently wrap
+/// under `overflow-checks = false` if artwork ever moved past 127.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SpriteInfo {
-    pub name: &'static str,
-    pub x: i8,
-    pub y: i8,
-    pub width: u8,
-    pub height: u8,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) enum Event {
-    Move(SpriteInfo),
-    Collision(SpriteInfo),
+impl SpriteInfo {
+    /// Axis-aligned bounding-box overlap test.
+    pub fn collides_with(&self, other: &SpriteInfo) -> bool {
+        self.x < other.x + other.width
+            && self.x + self.width > other.x
+            && self.y < other.y + other.height
+            && self.y + self.height > other.y
+    }
 }
 
 // Utility functions
 pub(crate) fn millis() -> u64 {
     Instant::now().as_millis()
-}
-
-// Core sprite trait
-pub(crate) trait Sprite: Send + Sync {
-    // Required properties
-    fn x(&self) -> i8;
-    fn y(&self) -> i8;
-    fn width(&self) -> u8;
-    fn height(&self) -> u8;
-    fn name(&self) -> &'static str;
-
-    // Event system methods
-    fn subscribe(
-        &mut self,
-        tx: Publisher<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
-        rx: Subscriber<'static, CriticalSectionRawMutex, Event, 3, 4, 4>,
-    );
-
-    fn collided_with(&self, sprite: &SpriteInfo) -> bool {
-        self.x() < sprite.x + sprite.width as i8
-            && self.x() + self.width() as i8 > sprite.x
-            && self.y() < sprite.y + sprite.height as i8
-            && self.y() + self.height() as i8 > sprite.y
-    }
-
-    fn get_info(&self) -> SpriteInfo {
-        SpriteInfo {
-            name: self.name(),
-            x: self.x(),
-            y: self.y(),
-            width: self.width(),
-            height: self.height(),
-        }
-    }
 }
 
 pub mod font {

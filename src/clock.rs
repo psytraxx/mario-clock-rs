@@ -31,17 +31,35 @@ impl Default for ClockBuffs {
     }
 }
 
-pub struct Clock<'a, I2C: I2c> {
-    rtc: PCF8563<I2C>,
-    socket: Option<UdpSocketWrapper<'a>>,
+/// Why an NTP synchronisation failed.
+///
+/// Distinguishes the failure modes so the caller can log something more
+/// specific than a generic DNS error.
+#[derive(Debug)]
+pub enum SyncError {
+    /// Could not bind the local UDP socket.
+    SocketBind,
+    /// Could not resolve the NTP server's hostname.
+    Dns(dns::Error),
+    /// Could not send the NTP request.
+    Request,
+    /// No usable NTP response came back.
+    Response,
 }
 
-impl<'a, I2C: I2c> Clock<'a, I2C> {
-    pub fn new<T: I2c>(i2c: T) -> Self
-    where
-        I2C: From<T>,
-    {
-        let mut rtc = PCF8563::new(i2c.into());
+impl From<dns::Error> for SyncError {
+    fn from(e: dns::Error) -> Self {
+        SyncError::Dns(e)
+    }
+}
+
+pub struct Clock<I2C: I2c> {
+    rtc: PCF8563<I2C>,
+}
+
+impl<I2C: I2c> Clock<I2C> {
+    pub fn new(i2c: I2C) -> Self {
+        let mut rtc = PCF8563::new(i2c);
         let datetime = rtc.get_datetime().ok();
 
         println!("RTC time: {:?}", datetime);
@@ -57,14 +75,14 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
             );
         };
 
-        Clock { rtc, socket: None }
+        Clock { rtc }
     }
 
     pub async fn sync_ntp(
         &mut self,
-        stack: Stack<'a>,
-        buffs: &'a mut ClockBuffs,
-    ) -> Result<(), dns::Error> {
+        stack: Stack<'_>,
+        buffs: &mut ClockBuffs,
+    ) -> Result<(), SyncError> {
         let mut socket = UdpSocket::new(
             stack,
             &mut buffs.rx_meta,
@@ -76,14 +94,14 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         // Bind socket with error handling
         if let Err(e) = socket.bind(123) {
             println!("Failed to bind UDP socket to port 123: {:?}", e);
-            return Err(dns::Error::Failed);
+            return Err(SyncError::SocketBind);
         }
 
+        // The socket is only needed for the duration of this call, so it stays
+        // a local rather than a field on Clock.
         let socket = UdpSocketWrapper::from(socket);
 
         let addr: Ipv4Address = self.dns_query(&stack, "pool.ntp.org").await?;
-
-        self.socket = Some(socket);
 
         let offset_seconds = TIME_OFFSET_SECONDS.load(Ordering::Relaxed);
         let context = NtpContext::new(TimeStampGen::new(offset_seconds as i64 * 1_000_000));
@@ -91,39 +109,30 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
         println!("getting time from {}", addr);
         let addr = V4(SocketAddrV4::new(addr, 123));
 
-        // Send NTP request with error handling
-        let socket_ref = self.socket.as_ref().ok_or_else(|| {
-            println!("ERROR: Socket not initialized");
-            dns::Error::Failed
-        })?;
-
-        let req = match sntp_send_request(addr, socket_ref, context).await {
+        let req = match sntp_send_request(addr, &socket, context).await {
             Ok(r) => r,
             Err(e) => {
                 println!("Failed to send NTP request: {:?}", e);
-                return Err(dns::Error::Failed);
+                return Err(SyncError::Request);
             }
         };
 
-        // Process NTP response
-        let socket_ref = self.socket.as_ref().ok_or_else(|| {
-            println!("ERROR: Socket not initialized");
-            dns::Error::Failed
-        })?;
-
-        if let Ok(response) = sntp_process_response(addr, socket_ref, context, req).await {
-            println!("received NTP response: {:?}", response);
-            let uptime_seconds = Instant::now().as_secs() as u32;
-            // sntpc >= 0.11 reports seconds as u64; the offset fits in u32 well past 2100.
-            let boot_time_offset = response.seconds.saturating_sub(uptime_seconds as u64) as u32;
-            TIME_OFFSET_SECONDS.store(boot_time_offset, Ordering::Relaxed);
-            self.set_rtc();
-        } else {
-            println!("Failed to process NTP response");
-            return Err(dns::Error::Failed);
+        match sntp_process_response(addr, &socket, context, req).await {
+            Ok(response) => {
+                println!("received NTP response: {:?}", response);
+                let uptime_seconds = Instant::now().as_secs() as u32;
+                // sntpc >= 0.11 reports seconds as u64; the offset fits in u32 well past 2100.
+                let boot_time_offset =
+                    response.seconds.saturating_sub(uptime_seconds as u64) as u32;
+                TIME_OFFSET_SECONDS.store(boot_time_offset, Ordering::Relaxed);
+                self.set_rtc();
+                Ok(())
+            }
+            Err(e) => {
+                println!("Failed to process NTP response: {:?}", e);
+                Err(SyncError::Response)
+            }
         }
-
-        Ok(())
     }
 
     pub fn get_time() -> DateTime<Utc> {
@@ -180,16 +189,10 @@ impl<'a, I2C: I2c> Clock<'a, I2C> {
     }
 
     fn set_rtc(&mut self) {
-        let time_seconds = TIME_OFFSET_SECONDS.load(Ordering::Relaxed);
-
-        // Convert timestamp with error handling
-        let t = match DateTime::<Utc>::from_timestamp(time_seconds as i64, 0) {
-            Some(dt) => dt,
-            None => {
-                println!("ERROR: Invalid timestamp, cannot set RTC");
-                return;
-            }
-        };
+        // Write the *current* wall-clock time. TIME_OFFSET_SECONDS holds
+        // `epoch - uptime`, so using it directly would set the RTC back by
+        // however long the device has been running.
+        let t = Self::get_time();
 
         // Set RTC time
         if let Err(e) = self.rtc.set_datetime(&pcf8563::DateTime {
