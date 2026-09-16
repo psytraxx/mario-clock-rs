@@ -40,7 +40,7 @@ pub enum SyncError {
     /// Could not bind the local UDP socket.
     SocketBind,
     /// Could not resolve the NTP server's hostname.
-    Dns(dns::Error),
+    Dns,
     /// Could not send the NTP request.
     Request,
     /// No usable NTP response came back.
@@ -48,8 +48,8 @@ pub enum SyncError {
 }
 
 impl From<dns::Error> for SyncError {
-    fn from(e: dns::Error) -> Self {
-        SyncError::Dns(e)
+    fn from(_e: dns::Error) -> Self {
+        SyncError::Dns
     }
 }
 
