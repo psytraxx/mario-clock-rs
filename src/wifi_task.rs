@@ -5,7 +5,8 @@ use embassy_time::{Duration, Timer};
 use esp_hal::peripherals::WIFI;
 use esp_println::println;
 use esp_radio::wifi::{
-    self, ControllerConfig, Interface, WifiController, WifiError, sta::StationConfig,
+    self, AuthenticationMethodConfig, ControllerConfig, Interface, WifiController, WifiError,
+    sta::StationConfig,
 };
 
 use static_cell::StaticCell;
@@ -31,8 +32,10 @@ pub async fn connect_to_wifi(
 ) -> Result<Stack<'static>, WifiError> {
     let station_config = wifi::Config::Station(
         StationConfig::default()
-            .with_ssid(env!("WIFI_SSID"))
-            .with_password(env!("WIFI_PSK").into()),
+            .with_ssid(env!("WIFI_SSID").try_into().expect("invalid WIFI_SSID"))
+            .with_authentication(AuthenticationMethodConfig::Wpa2Personal(
+                env!("WIFI_PSK").try_into().expect("invalid WIFI_PSK"),
+            )),
     );
 
     let interfaces = esp_radio::wifi::Interface::station();

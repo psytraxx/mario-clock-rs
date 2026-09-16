@@ -6,14 +6,13 @@ use esp_hal::{
     gpio::{AnyPin, Pin},
     peripherals::{DMA_CH0, LCD_CAM},
     system::Cpu,
-    time::Rate,
 };
-use esp_hub75::{Hub75, Hub75Pins16};
+use esp_hub75::{Hub75, Hub75Config, Hub75Pins16};
 use esp_println::println;
 
 use crate::{FBType, FrameBufferExchange, REFRESH_RATE};
 
-type Hub75Type = Hub75<'static, esp_hal::Async>;
+type Hub75Type = Hub75<esp_hal::Async, FBType>;
 
 pub(crate) struct Hub75Peripherals<'a> {
     pub lcd_cam: LCD_CAM<'a>,
@@ -63,38 +62,26 @@ pub(crate) async fn hub75_task(
         latch: peripherals.latch.degrade(),
     };
 
-    let mut hub75 = Hub75Type::new_async(
+    let hub75 = Hub75Type::new_async(
         peripherals.lcd_cam,
         pins,
         channel,
         tx_descriptors,
-        Rate::from_mhz(10),
+        Hub75Config::new().with_frequency(crate::PIXEL_CLOCK),
+        fb,
     )
     .expect("failed to create Hub75!");
 
     let mut count = 0u32;
     let mut start = Instant::now();
 
-    let mut fb = fb;
-
     loop {
-        // if there is a new buffer available, swap it and send the old one
-        if rx.signaled() {
-            let new_fb = rx.wait().await;
-            tx.signal(fb);
-            fb = new_fb;
-        }
-
-        let mut xfer = hub75
-            .render(fb)
-            .map_err(|(e, _hub75)| e)
-            .expect("failed to start render!");
-        xfer.wait_for_done()
-            .await
-            .expect("render DMA transfer failed");
-        let (result, new_hub75) = xfer.wait();
-        hub75 = new_hub75;
-        result.expect("transfer failed");
+        // wait for a new buffer to render, then swap it in
+        let new_fb = rx.wait().await;
+        let mut xfer = hub75.swap(new_fb).expect("failed to start swap!");
+        xfer.wait_for_done().await;
+        let old_fb = xfer.wait().expect("swap DMA transfer failed");
+        tx.signal(old_fb);
 
         count += 1;
         const FPS_INTERVAL: Duration = Duration::from_secs(1);

@@ -21,12 +21,12 @@ use esp_hal::{
     Blocking,
     gpio::Pin,
     i2c::master::{Config, I2c},
-    interrupt::{Priority, software::SoftwareInterruptControl},
+    interrupt::Priority,
     rng::Rng,
     time::Rate,
     timer::timg::TimerGroup,
 };
-use esp_hub75::framebuffer::{compute_frame_count, compute_rows, plain::DmaFrameBuffer};
+use esp_hub75::framebuffer::{bitplane::plain::frame::DmaFrameBuffer, compute_rows};
 use esp_println::{logger::init_logger_from_env, println};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
@@ -46,13 +46,14 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 const ROWS: usize = 64;
 const COLS: usize = 64;
-const BITS: u8 = 4; // 3-bit with double buffering = smooth, no flicker
+const PLANES: usize = 4;
 const NROWS: usize = compute_rows(ROWS);
-const FRAME_COUNT: usize = compute_frame_count(2); // Use double buffering
+pub(crate) const PIXEL_CLOCK: Rate = Rate::from_mhz(10);
 
-// Define a fixed-size buffer type for the display
-type FBType = DmaFrameBuffer<ROWS, COLS, NROWS, BITS, FRAME_COUNT>;
+type FBType = DmaFrameBuffer<NROWS, COLS, PLANES>;
 type FrameBufferExchange = Signal<CriticalSectionRawMutex, &'static mut FBType>;
+
+const REFRESH_HZ: u32 = esp_hub75::refresh_hz::<FBType>(PIXEL_CLOCK);
 pub type I2CType = I2c<'static, Blocking>;
 
 macro_rules! mk_static {
@@ -77,8 +78,7 @@ async fn main(spawner: Spawner) {
     init_logger_from_env();
 
     let peripherals = esp_hal::init(esp_hal::Config::default());
-    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    let software_interrupt = sw_ints.software_interrupt2;
+    let software_interrupt = peripherals.FROM_CPU_INTR2;
 
     // --- RTC Initialization Start ---
     println!("Initializing I2C for BM8563 RTC...");
@@ -104,7 +104,16 @@ async fn main(spawner: Spawner) {
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
-    esp_rtos::start(timg0.timer0, sw_ints.software_interrupt0);
+    esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
+
+    println!(
+        "display: {}x{} planes={} pclk={}MHz refresh={}Hz",
+        ROWS,
+        COLS,
+        PLANES,
+        PIXEL_CLOCK.as_mhz(),
+        REFRESH_HZ
+    );
 
     println!("init framebuffer exchange");
     static TX: FrameBufferExchange = FrameBufferExchange::new();
@@ -164,7 +173,7 @@ async fn main(spawner: Spawner) {
 
     esp_rtos::start_second_core(
         peripherals.CPU_CTRL,
-        sw_ints.software_interrupt1,
+        peripherals.FROM_CPU_INTR1,
         app_core_stack,
         cpu1_fnctn,
     );
